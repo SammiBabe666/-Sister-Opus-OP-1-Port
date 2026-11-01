@@ -1,0 +1,9 @@
+sammi.sister — an Opus 2 port of SISTER for the Teenage Engineering OP-1 (firmware 246)
+SISTER: Copyright (C) 2026 Hundekraft (OP-1 Workshop / kennel, https://github.com/Hundekraft/op1-workshop, source 3.1.1)
+Port: Copyright (C) 2026 SammiBabe666
+Built against the Opus 2 plugin kit by LizardMan (https://github.com/LizardMan245/opus, GPL-3.0).
+
+GPL-3.0-or-later (LICENSE) with kennel's ADDITIONAL PERMISSION (GPL-3.0 section 7): you may combine this program, or a
+work based on it, with the Teenage Engineering OP-1 firmware (original or patched) and convey the resulting combination,
+provided that the parts that are this program or based on it are conveyed under the GPL with this additional permission.
+The OP-1 firmware is not covered. The full kennel NOTICE is in upstream/NOTICE. Corresponding source: this repository.

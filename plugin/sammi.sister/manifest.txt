@@ -1,0 +1,14 @@
+# sammi.sister: Hundekraft's SISTER (OP-1 Workshop 3.1.1), a stereo cathedral reverb whose tail sings (CHOIR),
+# rings in tune (PIPES) or swells backwards (VESPER), as a native Opus 2 effect for the synth, the drum and the master.
+# The DSP is SISTER's own, unchanged (sister_dsp.c, its Blackfin kernels and tables); the glue and the page are the
+# port's. Blue space, green voice, white swell, orange mix; shift + green the PIPES key (a green push: semitones or
+# cents). GPL-3.0-or-later with the OP-1 firmware permission: see the release's NOTICE and SOURCE.
+opmod     1
+id        sammi.sister
+name      Sister
+author    SammiBabe666, Hundekraft
+version   1.0.0
+core      2.0
+adds      effect sister
+uses      green_turn shift modal "pipes key (sister page)"
+uses      green_push modal "key: semitones or cents"

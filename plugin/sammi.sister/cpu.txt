@@ -1,0 +1,4 @@
+# ESTIMATE, not a device measurement: Hundekraft's unit model for SISTER's worst block (27.6k bcore packets,
+# about +13 points of the 580,525-cycle block, ~77k cycles) plus margin. Replace with "audio: worst N" from the
+# mods list (developer mode on, heaviest settings) after trying it on an OP-1.
+cycles 96000
