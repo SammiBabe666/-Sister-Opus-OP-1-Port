@@ -34,6 +34,8 @@ static int shift;
 static unsigned allocs;
 static unsigned strokes, strokes_bad, texts, art_draws, puts_;
 static char text_seen[32][24];
+static unsigned strokes_colour, strokes_grey, art_rgb;
+static unsigned char fake_slot[2];
 extern unsigned sister_host_cycles;
 
 int opus_effect_register(struct opl_self *self, const struct opus_effect *e) { (void)self; reg = e; return 8; }
@@ -52,16 +54,25 @@ unsigned short *opus_page_pixels(int *rows) { *rows = 376; return frame; }
 int opus_page_keep(unsigned short *out, unsigned cap, int x0, int x1, int y0, int y1)
 {
     assert(out && cap >= 1024 && x0 == 0 && x1 == 375 && y0 == 0 && y1 == 187);
-    out[0] = 0x1234;
+    out[0] = art_rgb == 0x0B9A9E || !art_rgb ? 0x1234 : 0x4321;   /* which art: normal or grey */
     return 1000;
 }
-void opus_page_put(const unsigned short *runs, int used) { assert(runs[0] == 0x1234 && used == 1000); puts_++; }
+static unsigned short last_put;
+void opus_page_put(const unsigned short *runs, int used) { assert((runs[0] == 0x1234 || runs[0] == 0x4321) && used == 1000); last_put = runs[0]; puts_++; }
 void opus_on_frame_begin(struct opl_self *self, void (*fn)(void)) { (void)self; h_begin = fn; }
 void opus_on_frame_under(struct opl_self *self, void (*fn)(unsigned short *)) { (void)self; h_under = fn; }
 void opus_on_key(struct opl_self *self, int (*fn)(int, int)) { (void)self; h_key = fn; }
+int opus_art_colour_slots(int a, unsigned c, unsigned char **slots, int max)
+{
+    assert(a == 0 && max > 0);
+    slots[0] = &fake_slot[c == 0xFFFFFF];
+    return 1;
+}
+void opus_art_set_colour(unsigned char **slots, int n, unsigned c) { assert(n == 1 && slots[0]); if (slots[0] == &fake_slot[0]) art_rgb = c; }   /* the teal slot */
 void opus_page_stroke_line(int x0, int y0, int x1, int y1, int width, int colour)
 {
-    (void)colour;
+    const unsigned c = (unsigned)colour & 0xFFFFFF;
+    if ((c >> 16) == (c >> 8 & 255) && (c >> 16) == (c & 255)) strokes_grey++; else strokes_colour++;
     strokes++;
     /* units x 256: the drawing is 320 x 160; SISTER keeps to rows 1..154 */
     if (x0 < 0 || x1 < 0 || x0 > 320 * 256 || x1 > 320 * 256 || y0 < 256 - 1 || y1 < 256 - 1 || y0 > 154 * 256 + 1 ||
@@ -244,6 +255,31 @@ int main(void)
                art_draws);
     }
     puts("6 page: drawn only after view, strokes inside the drawing, labels, key text, art kept: PASS");
+
+    /* 7: on and off. The OS calls the process only while the effect is on: blocks each frame = on, none = off. */
+    {
+        struct opus_fx_view v;
+        short vp[8] = { 19661, 6554, 0, 11469, 0, 0, 16384, 0 };
+        unsigned draws0 = art_draws;
+        for (int cycle = 0; cycle < 6; cycle++) {
+            for (int phase = 0; phase < 2; phase++) {          /* 0 on, 1 off */
+                for (int f = 0; f < 8; f++) {
+                    sister_host_cycles += 400000u * 33u;
+                    if (!phase) for (int b = 0; b < 23; b++) { for (int i = 0; i < 64; i++) l[i] = (int16_t)(rnd() / 4); reg->mono(&syn.fx, l, vp); }
+                    if (phase && f == 2) vp[0] = (short)(vp[0] ^ 0x1000);   /* a knob turned while off: still on the page */
+                    strokes_colour = strokes_grey = 0;
+                    h_begin(); h_under(frame); reg->view(vp, &v);
+                    if (f >= 4) {                                  /* settled: the state shows */
+                        if (phase) assert(strokes_colour == 0 && strokes_grey > 300 && last_put == 0x4321);
+                        else { if (!(strokes_colour > 250 && last_put == 0x1234)) fprintf(stderr, "cycle %d f %d colour %u grey %u put %x\n", cycle, f, strokes_colour, strokes_grey, last_put); assert(strokes_colour > 250 && last_put == 0x1234); }
+                    }
+                }
+            }
+        }
+        printf("  6 on/off cycles; art re-kept %u times in all (once per colour)\n", art_draws - draws0);
+        assert(art_draws - draws0 <= 2);
+    }
+    puts("7 effect off (no process calls): every FX stroke and the art grey; on again: colours back, 6 cycles: PASS");
     puts("sammi.sister Opus host test PASS");
     return 0;
 }

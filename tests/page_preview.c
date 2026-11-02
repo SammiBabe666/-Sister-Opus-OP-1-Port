@@ -33,12 +33,14 @@ void opus_page_put(const unsigned short *runs, int used) { (void)runs; (void)use
 void opus_on_frame_begin(struct opl_self *self, void (*fn)(void)) { (void)self; h_begin = fn; }
 void opus_on_frame_under(struct opl_self *self, void (*fn)(unsigned short *)) { (void)self; h_under = fn; }
 void opus_on_key(struct opl_self *self, int (*fn)(int, int)) { (void)self; (void)fn; }
+int opus_art_colour_slots(int a, unsigned c, unsigned char **slots, int max) { static unsigned char f; (void)a; (void)c; (void)max; slots[0] = &f; return 1; }
+void opus_art_set_colour(unsigned char **slots, int n, unsigned c) { (void)slots; (void)n; (void)c; }
 static const char *col(int c)
 {
     static char b[16];
     static const unsigned acc[4] = { 0x698EFF, 0x00ED95, 0xFFFFFF, 0xFF3A5D };   /* stock-looking encoder colours */
-    if (c & 0x01000000) { snprintf(b, sizeof b, "#%06X", c & 0xFFFFFF); return b; }
     if (c <= -10 && c >= -13) { snprintf(b, sizeof b, "#%06X", acc[-10 - c]); return b; }
+    if (c > 0 && (c & 0x01000000)) { snprintf(b, sizeof b, "#%06X", c & 0xFFFFFF); return b; }
     return "#FFFFFF";
 }
 void opus_page_stroke_line(int x0, int y0, int x1, int y1, int width, int colour)
@@ -61,7 +63,7 @@ static uint32_t rng = 7;
 static int16_t rnd(void) { rng = rng * 1664525u + 1013904223u; return (int16_t)(rng >> 16); }
 
 /* one state: the knobs, an input level for the tail (0: silent), frames to settle, shift */
-static void shot(const char *dir, const char *name, short k0, short k1, short k2, short k3, int level, int sh)
+static void shot(const char *dir, const char *name, short k0, short k1, short k2, short k3, int level, int sh, int off)
 {
     static struct opus_fx fx;
     static int made;
@@ -78,7 +80,7 @@ static void shot(const char *dir, const char *name, short k0, short k1, short k2
     shift = sh;
     for (int f = 0; f < 90; f++) {                        /* ~3 s at 30 frames a second, 22 blocks a frame */
         sister_host_cycles += 400000u * 33u;
-        for (int b = 0; b < 22; b++) {
+        for (int b = 0; b < 22 && !(off && f >= 60); b++) {   /* off: the OS stops calling the process */
             for (int i = 0; i < 64; i++) buf[i] = level ? (int16_t)(rnd() / level) : 0;
             reg->mono(&fx, buf, par);
         }
@@ -98,10 +100,12 @@ int main(int argc, char **argv)
     if (argc < 2) return 2;
     struct opl_self self = { sizeof(struct opl_self), "sammi.sister", "/yaffs2/mod/sammi.sister", 0 };
     if (opl_init(&self)) return 1;
-    shot(argv[1], "1-defaults-silent", 19661, 6554, 0, 11469, 0, 0);
-    shot(argv[1], "2-defaults-playing", 19661, 6554, 0, 11469, 6, 0);
-    shot(argv[1], "3-pipes-playing", 19661, 32767, 0, 20000, 6, 0);
-    shot(argv[1], "4-cathedral-vesper-wet", 32767, 16000, 32767, 32767, 6, 0);
-    shot(argv[1], "5-chapel-dry-shift-key", 0, 0, 0, 0, 0, 1);
+    shot(argv[1], "1-defaults-silent", 19661, 6554, 0, 11469, 0, 0, 0);
+    shot(argv[1], "2-defaults-playing", 19661, 6554, 0, 11469, 6, 0, 0);
+    shot(argv[1], "3-pipes-playing", 19661, 32767, 0, 20000, 6, 0, 0);
+    shot(argv[1], "4-cathedral-vesper-wet", 32767, 16000, 32767, 32767, 6, 0, 0);
+    shot(argv[1], "5-chapel-dry-shift-key", 0, 0, 0, 0, 0, 1, 0);
+    shot(argv[1], "2-defaults-playing-OFF", 19661, 6554, 0, 11469, 6, 0, 1);
+    shot(argv[1], "3-pipes-playing-OFF", 19661, 32767, 0, 20000, 6, 0, 1);
     return 0;
 }

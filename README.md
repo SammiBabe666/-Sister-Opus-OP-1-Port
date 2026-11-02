@@ -24,6 +24,17 @@ rings in tune (PIPES: root/fifth/octave combs) or swells backwards (VESPER). Thi
 - **Green push** on SISTER's page: toggles shift + green between semitones and cents (the original used a press page).
 - Shift + blue/white/orange: the OS's fine steps. The key shows on the green label while shift is held.
 - Screen: SISTER's own nave/rose/nun/candles page, ported line for line onto Opus drawing calls.
+- **Effect off:** the art, nave, petals/pipes, candle flames and mix bar turn grey (each at its own brightness, 80 %),
+  and the tail-driven motion (petals singing, flame flicker) settles at the still sketch; labels keep their colours and
+  the OS's own "off" overlay still dims the frame as on every effect page. On again: colours and motion return.
+
+### How on/off is detected
+Opus has no call that reports an effect's on/off state, and no documented firmware flag exists for the synth and drum
+effects (only the master's). The OS runs an effect's process call only while it is on, so each instance counts its
+process calls (`sister_inst.blocks`, written by the audio callback), and the page reads the count each frame: no new
+block for 4 frames (~0.13 s; ~23 blocks arrive per frame when on) means off. It is the effect's real run state, not
+volume, animation or parameters. It also greys when Opus's CPU budget switches the plugin off (it is not processing
+then either). **Assumption, not verified on hardware:** that the OS stops calling a switched-off effect's process.
 
 ## What was reused / changed
 - **Unchanged from SISTER:** `sister_dsp.c/h`, `sister_kern.c/h`, `sister_asm.S` (Blackfin kernels), `sister_tables.h`,
@@ -43,7 +54,8 @@ rings in tune (PIPES: root/fifth/octave combs) or swells backwards (VESPER). Thi
 | SISTER's own host tests (`sister_test.c`, ASan/UBSan) | PASS |
 | SISTER's `check.py` audio checks on the shipped DSP (clicks, pipe tuning, VESPER, levels, stereo) | PASS, 63/63 |
 | Opus glue host test (`tests/opus_host_test.c`, mock core, ASan/UBSan) | PASS: glue output equals SISTER's `si_process` sample-for-sample over 6000 mono + 6000 master blocks with poisoned fast memory; MIX 0 exactly dry; init; key word law; page draws only on its own page, all strokes in bounds |
-| Page preview (`tests/page_preview.*`, browser render of the recorded strokes) | Matches the Workshop manual's native capture; see `docs/preview/` |
+| Page preview (`tests/page_preview.*`, browser render of the recorded strokes) | Matches the Workshop manual's native capture; on and off (`*-OFF.png`) states in `docs/preview/` |
+| Off/on (host test 7, mock core) | PASS: with no process calls every FX stroke and the art are grey and the tail motion stops; colours return within a frame of blocks resuming; 6 toggles, knob turned while off, no stale state; art re-kept once per colour |
 | Blackfin simulator (GNU `bfin-elf-run`) | `si_k_mix` asm = C reference after fixing a simulator bug; the full 9-regime asm/C/host hash comparison was started but **not completed** before this release |
 | Opus emulator | **Not performed** (not publicly available) |
 | Physical OP-1 | **Not performed.** No `checked` line in the manifest. |

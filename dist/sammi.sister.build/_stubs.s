@@ -21,6 +21,13 @@ _opus_alloc:
         P1.L = _opimp_opus_alloc;
         P1.H = _opimp_opus_alloc;
         JUMP (P1);
+        .global _opus_art_colour_slots
+        .type _opus_art_colour_slots, STT_FUNC
+        .align 2
+_opus_art_colour_slots:
+        P1.L = _opimp_opus_art_colour_slots;
+        P1.H = _opimp_opus_art_colour_slots;
+        JUMP (P1);
         .global _opus_art_draw
         .type _opus_art_draw, STT_FUNC
         .align 2
@@ -34,6 +41,13 @@ _opus_art_draw:
 _opus_art_ready:
         P1.L = _opimp_opus_art_ready;
         P1.H = _opimp_opus_art_ready;
+        JUMP (P1);
+        .global _opus_art_set_colour
+        .type _opus_art_set_colour, STT_FUNC
+        .align 2
+_opus_art_set_colour:
+        P1.L = _opimp_opus_art_set_colour;
+        P1.H = _opimp_opus_art_set_colour;
         JUMP (P1);
         .global _opus_art_text
         .type _opus_art_text, STT_FUNC

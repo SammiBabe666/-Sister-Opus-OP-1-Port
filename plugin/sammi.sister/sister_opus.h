@@ -11,6 +11,7 @@
 struct sister_inst {
     si_pos_t pos;
     int stereo;
+    volatile uint32_t blocks;              /* process calls so far: the OS calls them only while the effect is on */
 };
 
 /* An instance's bulk: SISTER's whole state (kennel's FX scratch). Synth and drum share one (the core gives their two

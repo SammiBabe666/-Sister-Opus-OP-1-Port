@@ -19,10 +19,11 @@ with sync_playwright() as p:
     pg = b.new_page(viewport={'width': 800, 'height': 400})
     for frag in sorted(out.glob('*.frag.svg')):
         live = frag.read_text()
+        still = inner.replace('#0B9A9E', '#585858').replace('#FFFFFF', '#CCCCCC') if '-OFF' in frag.name else inner   # sister_page.c grey_of
         html = ('<html><body style="margin:0;background:#000">'
                 '<svg xmlns="http://www.w3.org/2000/svg" width="800" height="400" viewBox="0 0 320 160">'
                 '<style>.t{font-family:"DejaVu Sans",sans-serif;font-weight:300}</style>'
-                f'<rect width="320" height="160" fill="#000"/>{inner}{live}</svg></body></html>')
+                f'<rect width="320" height="160" fill="#000"/>{still}{live}</svg></body></html>')
         pg.set_content(html)
         png = out / (frag.name.replace('.frag.svg', '.png'))
         pg.screenshot(path=str(png))

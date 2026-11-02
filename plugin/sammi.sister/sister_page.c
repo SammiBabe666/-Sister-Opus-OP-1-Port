@@ -45,13 +45,27 @@ static int green_taken;
 /* the still art and its kept pixels */
 #define KEPT_WORDS (24 * 1024)
 static int art = -1;
-static unsigned short *kept;
-static int kept_used = -1, kept_rows;
+static unsigned short *kept, *kept_grey;
+static int kept_used = -1, kept_grey_used = -1, kept_rows;
+static unsigned char *slot_teal[64], *slot_white[8];
+static int n_teal = -1, n_white;
 
 #define VX (SISTER_VPX * 4)                 /* Q10 */
 #define VY (SISTER_VPY * 4)
 
-static int rgb(const uint8_t *c) { return OPUS_RGB(((unsigned)c[0] << 16) | ((unsigned)c[1] << 8) | c[2]); }
+/* Off: the OS has stopped calling the effect's process (sister_inst.blocks stands still), so the page shows SISTER
+   switched off: every FX part (the art, the nave, petals, flames, the mix bar) in grey at its own brightness, and the
+   tail-driven motion settled at the still sketch. The labels keep their colours, as the OS's own pages do (the OS's
+   "off" overlay dims the whole frame over this, as on every effect page). */
+static int fx_off;
+static unsigned grey_of(unsigned c)
+{
+    const unsigned y = ((c >> 16 & 255) * 77 + (c >> 8 & 255) * 150 + (c & 255) * 29) >> 8;
+    const unsigned g = y * 205 >> 8;                 /* 80 %: less emphasis, still readable */
+    return g << 16 | g << 8 | g;
+}
+static int col(unsigned c) { return OPUS_RGB(fx_off ? grey_of(c) : c); }
+static int rgb(const uint8_t *c) { return col(((unsigned)c[0] << 16) | ((unsigned)c[1] << 8) | c[2]); }
 
 static int page_showing(void) { return frame_no - view_frame <= 2u; }
 
@@ -167,33 +181,62 @@ unsigned sister_host_cycles;                       /* the host tests (tests/opus
 static inline unsigned cycles(void) { return sister_host_cycles; }
 #endif
 
-/* the telemetry of the instance this page shows: the master's when its knobs are the page's, else the mono one's */
-static const si_pos_t *shown(const int32_t k[4])
+/* the instance this page shows: the master's when its last knobs are the page's and the mono one's are not, the mono
+   one's when its are; otherwise (knobs turned while it is off, an LFO between the two copies) the last one chosen */
+static const struct sister_inst *shown(const int32_t k[4])
 {
+    static const struct sister_inst *last;
     const struct sister_inst *m = sister_last[1], *s = sister_last[0];
-    if (m && m->pos.valid && m->pos.raw[0] == k[0] && m->pos.raw[1] == k[1] && m->pos.raw[2] == k[2] && m->pos.raw[3] == k[3]
-        && !(s && s->pos.raw[0] == k[0] && s->pos.raw[1] == k[1] && s->pos.raw[2] == k[2] && s->pos.raw[3] == k[3]))
-        return &m->pos;
-    return s ? &s->pos : m ? &m->pos : 0;
+#define SAME(i) ((i) && (i)->pos.valid && (i)->pos.raw[0] == k[0] && (i)->pos.raw[1] == k[1] && (i)->pos.raw[2] == k[2] && (i)->pos.raw[3] == k[3])
+    if (SAME(m) && !SAME(s)) last = m;
+    else if (SAME(s)) last = s;
+    else if (!last) last = s ? s : m;
+#undef SAME
+    return last;
 }
 
-/* the still art: drawn once on the cleared frame, its lit pixels kept, put back every frame after */
+/* on: the shown instance's process ran within the last frames (a block is 1.45 ms, a frame ~33 ms: ~23 blocks a frame;
+   4 frames without a block, ~0.13 s, is off). No instance yet: off. */
+static int running(const struct sister_inst *in)
+{
+    static const struct sister_inst *seen;
+    static uint32_t last_blocks;
+    static unsigned idle = 1000;
+    if (!in) return 0;
+    const uint32_t b = in->blocks;
+    if (in != seen) { seen = in; last_blocks = b; idle = 3; }   /* a new instance: one frame to show it runs */
+    else if (b != last_blocks) { last_blocks = b; idle = 0; }
+    else if (idle < 1000) idle++;
+    return idle < 4;
+}
+
+/* the still art: drawn once on the cleared frame (its normal colours, or grey for off: two kept copies), its lit pixels
+   kept, put back every frame after */
 static void still(void)
 {
     int rows;
     if (art < 0 || !kept || !opus_page_pixels(&rows))
         return;
     if (rows != kept_rows)
-        kept_used = -1;
-    if (kept_used < 0) {
+        kept_used = kept_grey_used = -1;
+    const int grey = fx_off && kept_grey;
+    unsigned short *const buf = grey ? kept_grey : kept;
+    int *const used = grey ? &kept_grey_used : &kept_used;
+    if (*used < 0) {
         if (!opus_art_ready(art))
             return;
+        if (n_teal < 0) {                            /* sister.svg's two colours: teal and white */
+            n_teal = opus_art_colour_slots(art, 0x0B9A9E, slot_teal, 64);
+            n_white = opus_art_colour_slots(art, 0xFFFFFF, slot_white, 8);
+        }
+        opus_art_set_colour(slot_teal, n_teal, grey ? grey_of(0x0B9A9E) : 0x0B9A9E);
+        opus_art_set_colour(slot_white, n_white, grey ? grey_of(0xFFFFFF) : 0xFFFFFF);
         opus_art_draw(art);
-        kept_used = opus_page_keep(kept, KEPT_WORDS, 0, rows - 1, 0, rows / 2 - 1);
-        kept_rows = rows;                            /* kept_used < 0: it does not fit, drawn again each frame */
+        *used = opus_page_keep(buf, KEPT_WORDS, 0, rows - 1, 0, rows / 2 - 1);
+        kept_rows = rows;                            /* *used < 0: it does not fit, drawn again each frame */
         return;                                      /* this frame has it drawn already */
     }
-    opus_page_put(kept, kept_used);
+    opus_page_put(buf, *used);
 }
 
 static void draw(void)
@@ -201,8 +244,9 @@ static void draw(void)
     int32_t k[4];
     for (int i = 0; i < 4; i++) k[i] = view_par[i] < 0 ? 0 : view_par[i];
     static const si_pos_t none;
-    const si_pos_t *P = shown(k);
-    if (!P) P = &none;
+    const struct sister_inst *in = shown(k);
+    fx_off = !running(in);
+    const si_pos_t *P = in ? &in->pos : &none;
     const unsigned c = cycles();
     int dt = last_cycles ? (int)((c - last_cycles) / 400000u) : 33;   /* 400 MHz: ms */
     last_cycles = c;
@@ -234,7 +278,7 @@ static void draw(void)
        one. The slow one lights the petals, sets how far they sing and how much the flames flicker (all of it at 6
        octaves, peak 256); the fast one's lead over the even one makes the petals breathe with the playing at any
        level. Silence returns all to 0: the still sketch. */
-    const int32_t pk = P->peak;
+    const int32_t pk = fx_off ? 0 : P->peak;      /* off: no tail; the motion settles at the still sketch */
     const int32_t lg = pk > 4 ? log2q8((uint32_t)pk) - 512 : 0;            /* 0 .. 3328 */
     const int32_t a_up = (int32_t)((int64_t)dt * 32768 / (dt + 40)), a_fd = (int32_t)((int64_t)dt * 32768 / (dt + 120));
     const int32_t a_su = (int32_t)((int64_t)dt * 32768 / (dt + 60)), a_sd = (int32_t)((int64_t)dt * 32768 / (dt + 700));
@@ -354,7 +398,7 @@ static void draw(void)
     {
         const int c_white = rgb(white);
         for (unsigned c3 = 0; c3 < 3; c3++) {
-            if ((frames + c3 * 3) % 4 == 0) {                         /* a new flicker target now and then, eased toward */
+            if (!fx_off && (frames + c3 * 3) % 4 == 0) {                         /* a new flicker target now and then, eased toward */
                 rng = rng * 1664525u + 1013904223u;
                 e_flick[c3] = (int32_t)(rng >> 17) - 16384;            /* -16384 .. 16383 */
             }
@@ -386,8 +430,8 @@ static void draw(void)
         const unsigned e4 = opus_accent_now(3);
         const unsigned dim = (((e4 >> 16 & 255) * 80 / 255) << 16) | (((e4 >> 8 & 255) * 80 / 255) << 8) | ((e4 & 255) * 80 / 255);
         const int height = (int)(((int64_t)e_mix * 46 + 16383) >> 15);
-        line(302 * 1024, 36 * 1024, 302 * 1024, 82 * 1024, 9 * 1024, OPUS_RGB(dim));   /* kennel's dim red at stock */
-        if (height) line(302 * 1024, (82 - height) * 1024, 302 * 1024, 82 * 1024, 9 * 1024, OPUS_RGB(e4));
+        line(302 * 1024, 36 * 1024, 302 * 1024, 82 * 1024, 9 * 1024, col(dim));   /* kennel's dim red at stock */
+        if (height) line(302 * 1024, (82 - height) * 1024, 302 * 1024, 82 * 1024, 9 * 1024, col(e4));
     }
     const unsigned value = ((unsigned)k[0] * 99u + 16383u) >> 15;
     char number[3] = { (char)('0' + value / 10), (char)('0' + value % 10), 0 };
@@ -475,6 +519,7 @@ static int key(int code, int pressed)
 void sister_page_init(struct opl_self *self)
 {
     kept = (unsigned short *)opus_alloc(self, 2 * KEPT_WORDS);
+    kept_grey = (unsigned short *)opus_alloc(self, 2 * KEPT_WORDS);   /* 0: off keeps the normal art, live parts grey */
     art = opus_art_text(self, "sister.svg", sister_svg, SISTER_SVG_LEN);
     opus_on_frame_begin(self, frame_begin);
     opus_on_frame_under(self, frame_under);

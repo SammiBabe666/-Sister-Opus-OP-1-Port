@@ -136,6 +136,7 @@ static void process(struct opus_fx *fx, short *l, short *r, const short *par)
     g->level = (int16_t)b->s.wet_level;
     g->vowel[0] = (int16_t)b->s.vowel[0];
     g->vowel[1] = (int16_t)b->s.vowel[1];
+    in->blocks++;
     sister_last[fx->stereo ? 1 : 0] = in;
 }
 
