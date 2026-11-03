@@ -36,4 +36,5 @@ struct opus_fx_view;
 void sister_view(const short *par, struct opus_fx_view *v);
 void sister_page_init(struct opl_self *self);
 void sister_key_touched(void);
+void sister_dark_touched(void);
 #endif

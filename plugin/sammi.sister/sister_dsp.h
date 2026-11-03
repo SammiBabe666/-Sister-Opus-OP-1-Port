@@ -80,6 +80,9 @@ typedef struct {
  int32_t g_body, g_choir, g_pipes, g_fwd, g_rev, g_dry, g_wet, g_er, g_tilt, lim;
  int32_t tilt_z[2], dc[2];
  int32_t peak, wet_level;           /* telemetry: wet block peak, slow wet level */
+ int32_t dark, dark_sm, dark_z[2];  /* sammi.sister (Opus only): DARK target and smoothed (Q15; 0 = SISTER as made),
+                                      the wet low-pass's state */
+ int32_t dark_on;
  /* ---- per-block workspace (in the scratch, not the ISR stack) ---- */
  int16_t dh[18], uh[2][10];         /* decimator and interpolator history (the working buffers are si_ws db / ub) */
  const si_tp *t;                     /* the tables in use this block: the SDRAM ones or the L1 copies */

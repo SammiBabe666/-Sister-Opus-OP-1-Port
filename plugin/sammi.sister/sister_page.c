@@ -32,11 +32,11 @@ static const uint8_t white[4] = { 255, 255, 255, 255 };
 static const uint8_t green[4] = { 0x00, 0xED, 0x95, 255 };
 static const uint8_t teal[4] = { 0x0B, 0x9A, 0x9E, 255 };
 
-static int32_t e_depth = -1, e_xc, e_vow[2], e_lit, e_mix, e_flame[3], e_flick[3], e_green, e_fast, e_slow, e_mid, e_breath;
+static int32_t e_depth = -1, e_xc, e_vow[2], e_lit, e_mix, e_flame[3], e_flick[3], e_green, e_fast, e_slow, e_mid, e_breath, e_dark;
 static uint32_t frames, rng = 0x2545F491u;
 
 /* the page: frame clock (display thread) and what `view` saw */
-static volatile unsigned frame_no, view_frame = 0x80000000u, key_until;
+static volatile unsigned frame_no, view_frame = 0x80000000u, key_until, dark_until;
 static short view_par[8];
 static unsigned last_cycles;
 volatile int sister_key_cents_mode;
@@ -265,6 +265,7 @@ static void draw(void)
     e_xc = ease(e_xc, t_xc, a);
     e_green = ease(e_green, k[1], a);
     e_mix = ease(e_mix, k[3], a);
+    e_dark = ease(e_dark, view_par[7] < 0 ? 0 : view_par[7], a);   /* DARK (the Opus port's): night falls on the nave */
     for (int v = 0; v < 2; v++) {                  /* the vowel position wraps at 3: ease the short way round */
         int32_t d = P->vowel[v] - e_vow[v];
         if (d > 6144) d -= 12288;
@@ -294,7 +295,11 @@ static void draw(void)
     }
 
     still();                                   /* floor, candles, ring, quatrefoil, nun: all static */
-    const int c_teal = rgb(teal);
+    /* DARK: the live nave and the petals dim toward night (to 45 %), the flames burn lower and amber */
+    const int32_t night = 32767 - (int32_t)(((int64_t)e_dark * 18000) >> 15);
+    uint8_t tn[4];
+    shade(tn, teal, night);
+    const int c_teal = rgb(tn);
 
     /* ---- the nave, far to near: per level its pointed transverse arch, the lancet on each wall between it and
        the nearer pair, and its columns (levels 0..3) ---- */
@@ -346,6 +351,7 @@ static void draw(void)
         blend(base, pale, green, 26214 + (int32_t)(((int64_t)e_green * 6553) >> 15));     /* 80 % green at VOICE 0 */
         shade(base, base, 30147);                                                          /* 92 % when silent */
         blend(pc, base, glow, (int32_t)(((int64_t)e_lit * 11469) >> 15));                 /* lit: up to 35 % toward glow */
+        shade(pc, pc, night);
         const int32_t tc = (32767 - e_xc) * 2 > 32767 ? 32767 : (32767 - e_xc) * 2, tp = e_xc * 2 > 32767 ? 32767 : e_xc * 2;
         shade(cc, pc, tc);
         shade(gp, pc, tp);
@@ -396,7 +402,10 @@ static void draw(void)
 
     /* ---- the candles: flames at the sketch's size at SWELL 0, up to twice that at 99 (VESPER), flickering with the tail ---- */
     {
-        const int c_white = rgb(white);
+        static const uint8_t amber[4] = { 0xFF, 0xA8, 0x3C, 255 };
+        uint8_t fl[4];
+        blend(fl, white, amber, e_dark);
+        const int c_white = rgb(fl);
         for (unsigned c3 = 0; c3 < 3; c3++) {
             if (!fx_off && (frames + c3 * 3) % 4 == 0) {                         /* a new flicker target now and then, eased toward */
                 rng = rng * 1664525u + 1013904223u;
@@ -408,7 +417,8 @@ static void draw(void)
             /* height Q8: the sketch's at SWELL 0, twice at 99, +-1.6 px of flicker at full tail */
             const int32_t t = h0 + (int32_t)(((int64_t)k[2] * h0) >> 15) + (int32_t)(((int64_t)fk[c3] * 410) >> 14);
             e_flame[c3] = ease(e_flame[c3] ? e_flame[c3] : t, t, af);
-            const int32_t h = e_flame[c3] < 512 ? 512 : e_flame[c3], w = w0 + ((h - h0) >> 2);
+            const int32_t hd = e_flame[c3] - (int32_t)(((int64_t)e_flame[c3] * e_dark) >> 16);   /* DARK: half height */
+            const int32_t h = hd < 512 ? 512 : hd, w = w0 + ((h - h0) >> 2);
             const int32_t sway = (int32_t)(((int64_t)fk[c3] * 160) >> 14);              /* the tip leans with the flicker */
             const int32_t bx = sister_candle[c3][0] * 4, by = sister_candle[c3][1] * 4;
             const unsigned nfl = sizeof sister_flame / sizeof sister_flame[0];
@@ -422,6 +432,34 @@ static void draw(void)
                     px = x; py = y;
                 }
             }
+        }
+    }
+
+    /* ---- DARK's night (the Opus port's own): a crescent moon rises in the top right and dust motes drift down the
+       nave, both brighter and more as DARK grows; they stay behind the rose and the nun as the nave does ---- */
+    if (e_dark > 400) {
+        static const uint8_t moon[4] = { 0xE8, 0xE4, 0xFF, 255 };
+        uint8_t mc[4];
+        shade(mc, moon, e_dark);
+        const int c_moon = rgb(mc);
+        /* the crescent's arcs: 90..270 degrees in 22.5 degree steps, Q12 (x left, y up) */
+        static const int16_t cs[9][2] = { { 0, 4096 }, { -1567, 3784 }, { -2896, 2896 }, { -3784, 1567 }, { -4096, 0 },
+                                          { -3784, -1567 }, { -2896, -2896 }, { -1567, -3784 }, { 0, -4096 } };
+        const int32_t R = 9 * 1024, cx = 262 * 1024, cy = 52 * 1024 - (int32_t)(((int64_t)e_dark * 22 * 1024) >> 15);
+        for (unsigned j = 1; j < 9; j++) {
+            line(cx + (R * cs[j - 1][0] >> 12), cy - (R * cs[j - 1][1] >> 12), cx + (R * cs[j][0] >> 12), cy - (R * cs[j][1] >> 12), 1024, c_moon);
+            line(cx + (R * cs[j - 1][0] >> 13) * 9 / 10, cy - (R * cs[j - 1][1] >> 12), cx + (R * cs[j][0] >> 13) * 9 / 10, cy - (R * cs[j][1] >> 12), 1024, c_moon);
+        }
+        const unsigned motes = 2 + (unsigned)(e_dark * 8 / 32768);              /* 2 .. 9 */
+        for (unsigned i = 0; i < motes; i++) {
+            const uint32_t cyc = 2600 + i * 337;                                  /* frames x 10 per fall */
+            const int32_t ph = (int32_t)((frames * (10 + i % 3 * 3) + i * 977u) % cyc);
+            const int32_t y = (14 + ph * 124 / (int32_t)cyc) * 1024;
+            const int32_t x = (104 + (int32_t)((i * 53u) % 112)) * 1024 + ((ph / 40 & 1) ? 300 : -300);
+            int32_t edge = ph < 300 ? ph : (int32_t)cyc - ph < 300 ? (int32_t)cyc - ph : 300;  /* fade in and out */
+            uint8_t dc[4];
+            shade(dc, moon, (int32_t)(((int64_t)e_dark * edge * 3 / 4) / 300));
+            cline(x, y, x, y + 700, rgb(dc), 0);
         }
     }
 
@@ -463,6 +501,18 @@ static void draw(void)
         opus_page_text(me, 2, 14, 126, 12, OPUS_COLOR_E2, "voice");
     opus_page_text(me, 3, 260, 126, 12, OPUS_COLOR_E3, "swell");
     opus_page_text(me, 4, 284, 11, 12, OPUS_COLOR_E4, "mix");
+    /* DARK (shift + orange, the Opus port's own): under the mix bar while it is set, shift is held or it just moved */
+    {
+        const unsigned dv = ((unsigned)(view_par[7] < 0 ? 0 : view_par[7]) * 99u + 16383u) >> 15;
+        if (dv || fw_shift_held() || (int)(dark_until - frame_no) > 0) {
+            char dt[10] = "dark ";
+            unsigned n = 5;
+            if (dv >= 10) dt[n++] = (char)('0' + dv / 10);
+            dt[n++] = (char)('0' + dv % 10);
+            dt[n] = 0;
+            opus_page_text_right(me, 5, 312, 88, 12, OPUS_COLOR_E4, dt);
+        }
+    }
     /* The OS's own effect page draws over this: its "off" overlay dims it when the effect is off. */
 }
 
@@ -494,6 +544,7 @@ void sister_view(const short *par, struct opus_fx_view *v)
 }
 
 void sister_key_touched(void) { key_until = frame_no + 45; }        /* ~1.5 s at the display's ~30 frames a second */
+void sister_dark_touched(void) { dark_until = frame_no + 45; }
 
 /* a green push while SISTER's page shows: shift + green moves the key by semitones or by cents (kennel's press page:
    a turn a semitone, shift + turn a cent). The release of a push taken is taken too. */

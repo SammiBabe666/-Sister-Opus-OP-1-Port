@@ -1,16 +1,18 @@
-# sammi.sister — Hundekraft's SISTER as a native Opus 2 plugin for the original OP-1
+# Dark Sister (darksister.opmod) — Hundekraft's SISTER as a native Opus 2 plugin for the original OP-1, with DARK
 
 SISTER (Hundekraft, OP-1 Workshop 3.1.1) is a stereo cathedral reverb whose tail sings (CHOIR: drifting vowel formants),
 rings in tune (PIPES: root/fifth/octave combs) or swells backwards (VESPER). This repo ports it to a standalone Opus 2
 `.opmod` (`sammi.sister`), using Opus's own effect service — no Workshop runtime, no bridge.
 
-**Download:** `dist/sammi.sister.opmod` (or the release ZIP in `dist/`).
+**Demo:** `docs/demo/darksister-demo.mp4` (rendered on a computer from the plugin's own code and DSP, not an OP-1 recording).
+
+**Download:** `dist/darksister.opmod` (or the release ZIP in `dist/`).
 
 ## Install
 1. OP-1 with Opus 2 (core 2.0 or later). Developer mode on for the first tries (Opus menu: synth+drum+tape+mixer, T1).
-2. Disk mode (shift + COM, T3), copy `sammi.sister.opmod` into the disk's `mods` folder, eject, restart.
-3. Opus menu → T2 (mods list): the `sister` row should say "loaded".
-4. Pick **sister** in the synth, drum or master effect list like any effect.
+2. Disk mode (shift + COM, T3), copy `darksister.opmod` into the disk's `mods` folder, eject, restart.
+3. Opus menu → T2 (mods list): the `dark sister` row should say "loaded".
+4. Pick **dark sister** (shown as DARK SISTER) in the synth, drum or master effect list like any effect.
 
 ## Controls (as SISTER)
 | Encoder | Macro | 0 → 99 |
@@ -20,9 +22,13 @@ rings in tune (PIPES: root/fifth/octave combs) or swells backwards (VESPER). Thi
 | White | SWELL | forward tail → fully reversed (VESPER) |
 | Orange | MIX | exactly dry → wet only |
 
+- **Shift + orange: DARK — exclusive to this Opus version.** Darkens the reverb: lowers the tank's damping corner and the
+  pipes' brightness (up to 70 %) and closes a low-pass on the wet down to ~430 Hz. At 0 it is SISTER exactly as
+  Hundekraft made it (byte-identical output). On the page night falls: the nave dims, the flames burn low and amber, a
+  crescent moon rises and dust motes drift down the nave; `dark NN` shows under the mix bar.
 - **Shift + green**: PIPES key, one semitone per detent (±24 around C3; lowest C#1 as in the original).
 - **Green push** on SISTER's page: toggles shift + green between semitones and cents (the original used a press page).
-- Shift + blue/white/orange: the OS's fine steps. The key shows on the green label while shift is held.
+- Shift + blue/white: the OS's fine steps. The key shows on the green label while shift is held.
 - Screen: SISTER's own nave/rose/nun/candles page, ported line for line onto Opus drawing calls.
 - **Effect off:** the art, nave, petals/pipes, candle flames and mix bar turn grey (each at its own brightness, 80 %),
   and the tail-driven motion (petals singing, flame flicker) settles at the still sketch; labels keep their colours and
@@ -63,6 +69,7 @@ the lowest core whose services Sister calls, so every Opus 2 beta loads it.
 | SISTER's own host tests (`sister_test.c`, ASan/UBSan) | PASS |
 | SISTER's `check.py` audio checks on the shipped DSP (clicks, pipe tuning, VESPER, levels, stereo) | PASS, 63/63 |
 | Opus glue host test (`tests/opus_host_test.c`, mock core, ASan/UBSan) | PASS: glue output equals SISTER's `si_process` sample-for-sample over 6000 mono + 6000 master blocks with poisoned fast memory; MIX 0 exactly dry; init; key word law; page draws only on its own page, all strokes in bounds |
+| DARK (host test 8; render comparison) | PASS: at DARK 0 the DSP output is byte-identical to Hundekraft's original (3 settings, `sister_render`); at DARK 99 the wet's high-band share drops ~10x and tails still end in exact silence; shift + orange sets it |
 | Page preview (`tests/page_preview.*`, browser render of the recorded strokes) | Matches the Workshop manual's native capture; on and off (`*-OFF.png`) states in `docs/preview/` |
 | Off/on (host test 7, mock core) | PASS: with no process calls every FX stroke and the art are grey and the tail motion stops; colours return within a frame of blocks resuming; 6 toggles, knob turned while off, no stale state; art re-kept once per colour |
 | Blackfin simulator (GNU `bfin-elf-run`) | `si_k_mix` asm = C reference once the simulator handles two half-register loads into one register in a parallel instruction (GDB's Blackfin simulator, including gdb-14.2, keeps only the second, so on it the master's left channel differs from the C reference; a simulator limitation, not Sister's). The full 9-regime asm/C/host comparison (`tests/bfin_sim/run_sim.sh`) has not been completed |

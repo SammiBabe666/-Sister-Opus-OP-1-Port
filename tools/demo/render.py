@@ -31,14 +31,24 @@ body{{margin:0;background:#000;width:{W}px;height:{H}px;overflow:hidden;font-fam
 .big{{font-size:76px;font-weight:200;letter-spacing:1px}} .mid{{font-size:34px;font-weight:300;color:#00ED95;margin-top:10px}}
 .sm{{font-size:24px;font-weight:300;color:#a8a8b8;margin-top:22px;line-height:1.5}}
 .t{{font-family:Inter,sans-serif;font-weight:300}}
+.brand{{font-size:92px;font-weight:200;letter-spacing:14px;text-transform:uppercase;display:flex;align-items:center;gap:26px}}
+.brand b{{font-weight:600;color:#FF3A5D}}
+.moon{{width:64px;height:64px;border-radius:50%;box-shadow:-14px 0 0 0 #E8E4FF;transform:translateX(14px)}}
+#mark{{position:absolute;right:36px;top:676px;font-size:15px;letter-spacing:5px;text-transform:uppercase;color:#8a8aa0}}
+#mark b{{color:#FF3A5D;font-weight:600}}
 </style></head><body>
 <svg id="scr" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 160"><g id="art"></g><g id="live"></g></svg>
-<div id="cap"></div><div id="card" style="opacity:0"></div></body></html>'''
+<div id="cap"></div><div id="mark"><b>dark</b> sister &middot; for opus</div><div id="card" style="opacity:0"></div></body></html>'''
 
-TITLE = ('<div class="big">welcome to opus</div><div class="mid">sister &middot; a cathedral reverb</div>'
-         '<div class="sm">hundekraft&rsquo;s sister, now a native opus 2 plugin<br>for the original op-1</div>')
-END = ('<div class="big">sammi.sister.opmod</div><div class="mid">opus 2 &middot; beta 3.2 &middot; op-1 firmware 246</div>'
-       '<div class="sm">copy it into the mods folder and restart<br>'
+TITLE = ('<div class="sm" style="margin:0 0 18px;letter-spacing:6px;color:#00ED95">WELCOME TO OPUS</div>'
+         '<div class="brand"><div class="moon"></div><div><b>Dark</b> Sister</div></div>'
+         '<div class="mid">a cathedral reverb that falls into night</div>'
+         '<div class="sm">hundekraft&rsquo;s sister, now a native opus 2 plugin for the original op-1<br>'
+         '<span style="color:#FF3A5D">new: dark &mdash; exclusive to the opus version</span></div>')
+END = ('<div class="brand" style="font-size:70px"><div class="moon"></div><div><b>Dark</b> Sister</div></div>'
+       '<div class="big" style="font-size:40px;margin-top:14px">darksister.opmod</div><div class="mid">opus 2 &middot; beta 3.2 &middot; op-1 firmware 246</div>'
+       '<div class="sm"><span style="color:#FF3A5D">dark (shift + orange) is exclusive to the opus version</span><br>'
+       'copy it into the mods folder and restart<br>'
        'sister by hundekraft &middot; opus port by sammibabe666 &middot; gpl-3.0</div>')
 
 jpg = work / 'jpg'
@@ -61,7 +71,7 @@ with sync_playwright() as p:
             card, op = TITLE, 1.0 if t < 3.4 else max(0.0, 1 - (t - 3.4) / 1.2)
             op = min(op, t / 0.6) if t < 0.6 else op
         elif cap == 'END':
-            card, op = END, min(1.0, (t - 46.0) / 1.0)
+            card, op = END, min(1.0, (t - 58.0) / 1.0)
         args = {'live': live, 'art': (grey if a == 'grey' else art) if a != last_art else None,
                 'cap': '' if cap in ('TITLE', 'END') else cap, 'card': card, 'op': op}
         pg.evaluate('''a => { if (a.art !== null) document.getElementById('art').innerHTML = a.art;

@@ -131,6 +131,7 @@ static void process(struct opus_fx *fx, short *l, short *r, const short *par)
         b->fast_filled = fx->fast;
         fresh = 1;
     }
+    b->s.dark = clampq(par[7]);                          /* DARK (shift + orange), the Opus port's own */
     si_process_l1(&b->s, l, r, q, g->key_cents, fx->fast, bytes, fresh);
     g->peak = (int16_t)b->s.peak;
     g->level = (int16_t)b->s.wet_level;
@@ -147,6 +148,13 @@ static void stereo(struct opus_fx *fx, short *l, short *r, const short *par) { p
  * detent after a green push (sister_key_cents_mode). The other encoders keep the OS's fine steps under shift. */
 static int shift_knob(short *par, int encoder, int detents)
 {
+    if (encoder == 3) {                                  /* shift + orange: DARK, 4 % a detent, as the encoders */
+        if (detents) {
+            par[7] = (short)clampq(par[7] + detents * 1311);
+            sister_dark_touched();
+        }
+        return 1;
+    }
     if (encoder != 1)
         return 0;
     if (!detents)
@@ -170,11 +178,11 @@ static int shift_knob(short *par, int encoder, int detents)
 }
 
 /* Sister's defaults (plugin.json): SPACE 60, VOICE 20, SWELL 0, MIX 35; page-2 words 5..7 as page2_defaults (word 6
- * C3). The encoders move 4 % a detent, the OS's own steps for an effect (bitcrush's tone and mix); shift + blue, white
- * and orange are the OS's fine steps. Word 4 is unused (kennel's selector), 5 and 7 unused, step 0 for all four. */
+ * C3). Word 7 is DARK (shift + orange; 0: SISTER's own sound), this port's addition. The encoders move 4 % a
+ * detent, the OS's own steps for an effect (bitcrush's tone and mix); shift + blue and white are the OS's fine steps. Word 4 is unused (kennel's selector), 5 unused, step 0 for 4-7. */
 static const struct opus_effect SISTER = {
     .size = sizeof(struct opus_effect),
-    .name = "sister",
+    .name = "dark sister",               /* the OS's effect list (the font draws it as DARK SISTER) */
     .defaults = { 19661, 6554, 0, 11469, 0, 0, 16384, 0 },
     .limits = { { 0, 32767, 10485 }, { 0, 32767, 10485 }, { 0, 32767, 10485 }, { 0, 32767, 10485 },
                 { 0, 32767, 0 }, { 0, 32767, 0 }, { 0, 32767, 0 }, { 0, 32767, 0 } },

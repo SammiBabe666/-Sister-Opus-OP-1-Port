@@ -88,6 +88,12 @@ void opus_page_text(struct opl_self *self, int slot, int x, int y, int size, int
     strcpy(text_seen[slot], text);
     texts++;
 }
+void opus_page_text_right(struct opl_self *self, int slot, int x, int y, int size, int colour, const char *text)
+{
+    (void)self; (void)colour; (void)x;
+    assert(slot >= 0 && slot < 32 && size >= 6 && size <= 48 && y + size <= 146);
+    strcpy(text_seen[slot], text);
+}
 unsigned opus_accent_now(int i) { static const unsigned c[4] = { 0x698EFF, 0x00ED95, 0xADADFF, 0xFF3A5D }; return c[i & 3]; }
 int fw_shift_held(void) { return shift; }
 
@@ -113,7 +119,7 @@ int main(void)
     struct opl_self self = { sizeof(struct opl_self), "sammi.sister", "/yaffs2/mod/sammi.sister", 0 };
     assert(opl_init(&self) == 0);
     /* 1 */
-    assert(reg && !strcmp(reg->name, "sister") && reg->size == sizeof(struct opus_effect));
+    assert(reg && !strcmp(reg->name, "dark sister") && reg->size == sizeof(struct opus_effect));
     static const short defs[8] = { 19661, 6554, 0, 11469, 0, 0, 16384, 0 };
     assert(!memcmp(reg->defaults, defs, sizeof defs));
     for (int i = 0; i < 4; i++) assert(reg->limits[i][0] == 0 && reg->limits[i][1] == 32767 && reg->limits[i][2] > 0);
@@ -190,7 +196,7 @@ int main(void)
         for (int c = -2400; c <= 2400; c++) assert(sister_semi_cents(sister_semi_word(c)) == c);
         assert(sister_key_of(0) == 0 && sister_key_of(16384) == 0);
         short p[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };          /* an unset word: C3 */
-        assert(reg->shift_knob(p, 0, 3) == 0 && reg->shift_knob(p, 2, 1) == 0 && reg->shift_knob(p, 3, -1) == 0);
+        assert(reg->shift_knob(p, 0, 3) == 0 && reg->shift_knob(p, 2, 1) == 0);   /* orange: DARK (test 8) */
         assert(reg->shift_knob(p, 1, 7) == 1 && sister_key_of(p[6]) == 700);
         assert(reg->shift_knob(p, 1, -2) == 1 && sister_key_of(p[6]) == 500);
         assert(reg->shift_knob(p, 1, 100) == 1 && sister_key_of(p[6]) == 2400);
@@ -280,6 +286,34 @@ int main(void)
         assert(art_draws - draws0 <= 2);
     }
     puts("7 effect off (no process calls): every FX stroke and the art grey; on again: colours back, 6 cycles: PASS");
+    /* 8: DARK (shift + orange, word 7) */
+    {
+        short p[8] = { 0, 0, 0, 0, 0, 0, 16384, 0 };
+        assert(reg->shift_knob(p, 3, 5) == 1 && p[7] == 5 * 1311);
+        assert(reg->shift_knob(p, 3, -10) == 1 && p[7] == 0);
+        assert(reg->shift_knob(p, 3, 100) == 1 && p[7] == 32767);
+        assert(reg->shift_knob(p, 2, 1) == 0);
+        /* wet only, noise bursts: high-band energy of the wet with DARK 0 vs 99, and the tail ends in silence */
+        double hi[2] = { 0, 0 }, all[2] = { 0, 0 };
+        for (int dkr = 0; dkr < 2; dkr++) {
+            struct inst d; make(&d, 1, 0, 0);
+            short pp[8] = { 19661, 6554, 0, 32767, 0, 0, 16384, dkr ? 32767 : 0 };
+            int16_t pl = 0; unsigned last = 0;
+            for (unsigned blk = 0; blk < 9000; blk++) {
+                for (int i = 0; i < 64; i++) { l[i] = blk < 700 ? (int16_t)(rnd() / 3) : 0; r[i] = blk < 700 ? (int16_t)(rnd() / 3) : 0; }
+                reg->stereo(&d.fx, l, r, pp);
+                for (int i = 0; i < 64; i++) {
+                    if (blk > 100 && blk < 700) { const double dd = l[i] - pl; hi[dkr] += dd * dd; all[dkr] += (double)l[i] * l[i]; }
+                    pl = l[i];
+                    if (l[i] || r[i]) last = blk;
+                }
+            }
+            assert(last + 400 < 9000);
+            printf("  dark %s: high/total energy %.4f, last non-zero block %u\n", dkr ? "99" : " 0", hi[dkr] / all[dkr], last);
+        }
+        assert(hi[1] / all[1] < 0.25 * hi[0] / all[0]);
+    }
+    puts("8 dark: shift + orange sets word 7, the wet loses most of its top, tails still end in exact silence: PASS");
     puts("sammi.sister Opus host test PASS");
     return 0;
 }

@@ -518,9 +518,17 @@ void si_process_l1(si_state *s, int16_t *l, int16_t *r, const int32_t q[4], int3
  if (s->clear_done < ring_words) { clear_block(s, l, r, ring_words, dg, wg); return; }
 
  /* ---- per-block parameters ---- */
- const int32_t damp = P->damp, pre_t = P->pre_t, win = P->win, depth = P->depth, er_g = P->er_g;
+ /* DARK (sammi.sister, the Opus port's own addition; 0 leaves every sample as SISTER made it): smoothed per block,
+    it lowers the tank's damping corner (darker, longer-dark tails) and the pipes' loop brightness by up to 70 %, and
+    closes a one-pole low-pass on the wet down to ~430 Hz (its law squared, so the first half of the knob is subtle) */
+ {
+  const int32_t t = clamp15(s->dark), d = s->dark_sm;
+  s->dark_sm = (t - d < 64 && t - d > -64) ? t : d + ((t - d) >> 3);
+ }
+ const int32_t dk = s->dark_sm, dk70 = M15(dk, 22938);
+ const int32_t damp = P->damp - ((P->damp * dk70) >> 15), pre_t = P->pre_t, win = P->win, depth = P->depth, er_g = P->er_g;
  const int32_t g_choir = P->g_choir, g_pipes = P->g_pipes, g_body = P->g_body;
- const int32_t vdepth = P->vdepth, vrate = P->vrate, qinv = P->qinv, klog = P->klog, bright = P->bright;
+ const int32_t vdepth = P->vdepth, vrate = P->vrate, qinv = P->qinv, klog = P->klog, bright = P->bright - ((P->bright * dk70) >> 15);
  const int32_t g_fwd = P->g_fwd, g_rev = P->g_rev, fade = P->fade, delta = P->delta;
  const int32_t g_tilt = P->g_tilt;
  if (!s->seeded) seed(s, P);
@@ -627,6 +635,18 @@ void si_process_l1(si_state *s, int16_t *l, int16_t *r, const int32_t q[4], int3
    s->tilt_z[0] = tz0; s->tilt_z[1] = tz1;
   } else s->tilt_z[0] = s->tilt_z[1] = 0;
   s->g_tilt = g_tilt;
+  /* DARK's wet low-pass (rounded toward zero, as the tilt: a tail still ends in silence); off at 0 */
+  if (dk) {
+   const int32_t k = 32767 - M15(M15(dk, dk), 29000);
+   int32_t z0 = s->dark_z[0], z1 = s->dark_z[1];
+   if (!s->dark_on) { z0 = sat(aw[0]); z1 = sat(bw[0]); s->dark_on = 1; }   /* starts on the signal: no step */
+   sa = sb = 0;
+   for (unsigned n = 0; n < SI_N; n++) {
+    z0 += rz14(M((sat(aw[n]) - z0) >> 1, k)); z1 += rz14(M((sat(bw[n]) - z1) >> 1, k));
+    aw[n] = z0; bw[n] = z1; sa += z0; sb += z1;
+   }
+   s->dark_z[0] = z0; s->dark_z[1] = z1;
+  } else s->dark_on = 0;
   /* DC remover (per block, ~4 Hz) and the block peak */
   int32_t peak = 0;
   s->dc[0] += (sa - s->dc[0]) >> 4; s->dc[1] += (sb - s->dc[1]) >> 4;

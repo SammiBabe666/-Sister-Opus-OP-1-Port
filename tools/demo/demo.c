@@ -53,6 +53,11 @@ void opus_page_text(struct opl_self *self, int slot, int x, int y, int size, int
     (void)self; (void)slot;
     if (svg) fprintf(svg, "<text x=\"%d\" y=\"%.2f\" font-size=\"%d\" fill=\"%s\" class=\"t\">%s</text>\n", x, y + size * 0.86, size, col(colour), text);
 }
+void opus_page_text_right(struct opl_self *self, int slot, int x, int y, int size, int colour, const char *text)
+{
+    (void)self; (void)slot;
+    if (svg) fprintf(svg, "<text x=\"%d\" y=\"%.2f\" font-size=\"%d\" fill=\"%s\" class=\"t\" text-anchor=\"end\">%s</text>\n", x, y + size * 0.86, size, col(colour), text);
+}
 unsigned opus_accent_now(int i) { return acc[i & 3]; }
 int fw_shift_held(void) { return 0; }
 
@@ -95,11 +100,11 @@ static double ramp(double t, double a, double b, double v0, double v1)
     const double u = (t - a) / (b - a);
     return v0 + (v1 - v0) * (u * u * (3 - 2 * u));
 }
-#define DUR 50.0
+#define DUR 62.0
 static void timeline(double t, short par[8], int *on, const char **cap, int *play)
 {
-    double sp = 60, vo = 20, sw = 0, mx = 35;
-    *on = 1; *play = t > 3.0 && t < 44.5;
+    double sp = 60, vo = 20, sw = 0, mx = 35, dk = 0;
+    *on = 1; *play = t > 3.0 && t < 56.5;
     *cap = "";
     if (t < 4.0) *cap = "TITLE";
     else if (t < 10) *cap = "sister: a stereo cathedral reverb whose tail sings, rings in tune and swells backwards";
@@ -107,11 +112,18 @@ static void timeline(double t, short par[8], int *on, const char **cap, int *pla
     else if (t < 25) { sp = 99; vo = ramp(t, 17.5, 23.5, 20, 99); *cap = "green \xc2\xb7 voice: the choir's drifting vowels become tuned pipes"; }
     else if (t < 32) { sp = ramp(t, 25, 26, 99, 75); vo = ramp(t, 25, 26.5, 99, 45); sw = ramp(t, 25.5, 30.5, 0, 99); *cap = "white \xc2\xb7 swell: the tail plays backwards (vesper), the candles flare"; }
     else if (t < 37) { sp = 75; vo = 45; sw = ramp(t, 32, 33, 99, 30); mx = ramp(t, 32.5, 36, 35, 70); *cap = "orange \xc2\xb7 mix: dry to wet"; }
-    else if (t < 42) { sp = 75; vo = 45; sw = 30; mx = 70; *on = 0; *cap = "fx off: the dry sound passes and the page greys out"; }
-    else { sp = 75; vo = 45; sw = 30; mx = 70; *cap = t < 46 ? "fx on again: colours and motion return" : "END"; }
+    else if (t < 49) {
+        sp = 75; vo = 45; sw = 30; mx = 70;
+        dk = t < 44 ? ramp(t, 38, 43, 0, 99) : ramp(t, 46, 48.5, 99, 55);
+        *cap = t < 40 ? "new, only on opus \xc2\xb7 shift + orange \xc2\xb7 dark"
+             : t < 44.5 ? "dark: a darker tank, pipes and tail \xe2\x80\x94 night falls on the nave"
+             : "the moon rises, the candles burn low and amber \xc2\xb7 exclusive to the opus version";
+    }
+    else if (t < 54) { sp = 75; vo = 45; sw = 30; mx = 70; dk = 55; *on = 0; *cap = "fx off: the dry sound passes and the page greys out"; }
+    else { sp = 75; vo = 45; sw = 30; mx = 70; dk = 55; *cap = t < 58 ? "fx on again: colours, motion and the night return" : "END"; }
     const double v[4] = { sp, vo, sw, mx };
     for (int i = 0; i < 4; i++) par[i] = (short)(v[i] * 32767 / 99 + 0.5);
-    par[4] = par[5] = par[7] = 0; par[6] = 16384;
+    par[4] = par[5] = 0; par[6] = 16384; par[7] = (short)(dk * 32767 / 99 + 0.5);
 }
 
 int main(int argc, char **argv)
