@@ -45,18 +45,27 @@ then either). **Assumption, not verified on hardware:** that the OS stops callin
 - Synth and drum share one SISTER state (Opus gives their instances one bulk; R246 runs one at a time). Master is separate.
 
 ## Build
-`OP1_BFIN_TOOLCHAIN=/path/to/bfin ./build.sh` (see `toolchain/README.md` for how the toolchain here was built).
+Uses the shared OP-1 Blackfin toolchain (GCC 13.3.0 + binutils 2.38, the Opus kit's specification); this project
+contains no compiler or compiler build scripts.
+
+```
+. ~/mnt/Documents/op1-toolchain/env.sh      # sets OP1_BFIN_TOOLCHAIN (or point it at any bfin-elf GCC 13.3.0 toolchain)
+./build.sh [OPUS_KIT_REPO]                  # the Opus repo (plugin-kit/ inside) at d7f28b0; cloned if not given
+```
+
+Target: Opus 2.0 beta 3.2 (plugin kit `d7f28b0`, API up to core 2.13). The manifest's `core 2.0` is deliberate: it is
+the lowest core whose services Sister calls, so every Opus 2 beta loads it.
 
 ## Test results — what was and was not done
 | Level | Result |
 |---|---|
-| Compilation | PASS: Opus kit `plugin_tool.py build` with `-Wall -Wextra -Werror`, GCC 13.3.0; `show` reads it back (15 imports, 47,444-byte image). SVG passes the kit's `svg` check. |
+| Compilation | PASS on the shared toolchain (GCC 13.3.0 + binutils 2.38, the kit's spec): `plugin_tool.py build` with `-Wall -Wextra -Werror`; `show` reads it back (17 imports, 48,416-byte image). Reproducible: two builds give SHA-256 `a1043dc0…6a0101`. SVG passes the kit's `svg` check. |
 | SISTER's own host tests (`sister_test.c`, ASan/UBSan) | PASS |
 | SISTER's `check.py` audio checks on the shipped DSP (clicks, pipe tuning, VESPER, levels, stereo) | PASS, 63/63 |
 | Opus glue host test (`tests/opus_host_test.c`, mock core, ASan/UBSan) | PASS: glue output equals SISTER's `si_process` sample-for-sample over 6000 mono + 6000 master blocks with poisoned fast memory; MIX 0 exactly dry; init; key word law; page draws only on its own page, all strokes in bounds |
 | Page preview (`tests/page_preview.*`, browser render of the recorded strokes) | Matches the Workshop manual's native capture; on and off (`*-OFF.png`) states in `docs/preview/` |
 | Off/on (host test 7, mock core) | PASS: with no process calls every FX stroke and the art are grey and the tail motion stops; colours return within a frame of blocks resuming; 6 toggles, knob turned while off, no stale state; art re-kept once per colour |
-| Blackfin simulator (GNU `bfin-elf-run`) | `si_k_mix` asm = C reference after fixing a simulator bug; the full 9-regime asm/C/host hash comparison was started but **not completed** before this release |
+| Blackfin simulator (GNU `bfin-elf-run`) | `si_k_mix` asm = C reference once the simulator handles two half-register loads into one register in a parallel instruction (GDB's Blackfin simulator, including gdb-14.2, keeps only the second, so on it the master's left channel differs from the C reference; a simulator limitation, not Sister's). The full 9-regime asm/C/host comparison (`tests/bfin_sim/run_sim.sh`) has not been completed |
 | Opus emulator | **Not performed** (not publicly available) |
 | Physical OP-1 | **Not performed.** No `checked` line in the manifest. |
 
