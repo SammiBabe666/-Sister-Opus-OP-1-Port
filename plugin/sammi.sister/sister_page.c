@@ -32,7 +32,7 @@ static const uint8_t white[4] = { 255, 255, 255, 255 };
 static const uint8_t green[4] = { 0x00, 0xED, 0x95, 255 };
 static const uint8_t teal[4] = { 0x0B, 0x9A, 0x9E, 255 };
 
-static int32_t e_depth = -1, e_xc, e_vow[2], e_lit, e_mix, e_flame[3], e_flick[3], e_green, e_fast, e_slow, e_mid, e_breath, e_dark;
+static int32_t e_depth = -1, e_xc, e_vow[2], e_lit, e_mix, e_flame[3], e_flick[3], e_green, e_fast, e_slow, e_mid, e_breath, e_dark, e_swell;
 static uint32_t frames, rng = 0x2545F491u;
 
 /* the page: frame clock (display thread) and what `view` saw */
@@ -265,6 +265,7 @@ static void draw(void)
     e_xc = ease(e_xc, t_xc, a);
     e_green = ease(e_green, k[1], a);
     e_mix = ease(e_mix, k[3], a);
+    e_swell = ease(e_swell, k[2], a);
     e_dark = ease(e_dark, view_par[7] < 0 ? 0 : view_par[7], a);   /* DARK (the Opus port's): night falls on the nave */
     for (int v = 0; v < 2; v++) {                  /* the vowel position wraps at 3: ease the short way round */
         int32_t d = P->vowel[v] - e_vow[v];
@@ -415,7 +416,7 @@ static void draw(void)
             fk[c3] = ease(fk[c3], (int32_t)(((int64_t)e_flick[c3] * e_lit) >> 15), af);
             const int32_t h0 = sister_candle[c3][2], w0 = sister_candle[c3][3];          /* Q8 */
             /* height Q8: the sketch's at SWELL 0, twice at 99, +-1.6 px of flicker at full tail */
-            const int32_t t = h0 + (int32_t)(((int64_t)k[2] * h0) >> 15) + (int32_t)(((int64_t)fk[c3] * 410) >> 14);
+            const int32_t t = h0 + (int32_t)(((int64_t)k[2] * 2 * h0) >> 15) + (int32_t)(((int64_t)fk[c3] * 410) >> 14);   /* x3 at 99 (kennel: x2) */
             e_flame[c3] = ease(e_flame[c3] ? e_flame[c3] : t, t, af);
             const int32_t hd = e_flame[c3] - (int32_t)(((int64_t)e_flame[c3] * e_dark) >> 16);   /* DARK: half height */
             const int32_t h = hd < 512 ? 512 : hd, w = w0 + ((h - h0) >> 2);
@@ -431,6 +432,19 @@ static void draw(void)
                     if (j) line(px, py, x, y, 1024, c_white);
                     px = x; py = y;
                 }
+            }
+            /* SWELL's halo (the Opus port's): a glow ring round each flame, wider and brighter as SWELL grows */
+            if (e_swell > 1200) {
+                static const int16_t ring[13][2] = { { 4096, 0 }, { 3547, 2048 }, { 2048, 3547 }, { 0, 4096 }, { -2048, 3547 },
+                    { -3547, 2048 }, { -4096, 0 }, { -3547, -2048 }, { -2048, -3547 }, { 0, -4096 }, { 2048, -3547 },
+                    { 3547, -2048 }, { 4096, 0 } };
+                const int32_t hy = by - 2 * h, rr = 2 * h + 512 + (int32_t)(((int64_t)e_swell * 2 * 1024) >> 15);
+                uint8_t hc[4];
+                shade(hc, fl, 8000 + (int32_t)(((int64_t)e_swell * 14000) >> 15));
+                const int c_halo = rgb(hc);
+                for (unsigned j = 1; j < 13; j++)
+                    line(bx + (rr * ring[j - 1][0] >> 12), hy + (rr * ring[j - 1][1] >> 12),
+                         bx + (rr * ring[j][0] >> 12), hy + (rr * ring[j][1] >> 12), 1024, c_halo);
             }
         }
     }
@@ -499,7 +513,15 @@ static void draw(void)
         opus_page_text(me, 2, 14, 126, 12, OPUS_COLOR_E2, kt);
     } else
         opus_page_text(me, 2, 14, 126, 12, OPUS_COLOR_E2, "voice");
-    opus_page_text(me, 3, 260, 126, 12, OPUS_COLOR_E3, "swell");
+    {                                                             /* SWELL with its value (the Opus port's) */
+        const unsigned sv = ((unsigned)k[2] * 99u + 16383u) >> 15;
+        char st[10] = "swell ";
+        unsigned n = 6;
+        if (sv >= 10) st[n++] = (char)('0' + sv / 10);
+        st[n++] = (char)('0' + sv % 10);
+        st[n] = 0;
+        opus_page_text_right(me, 3, 306, 126, 12, OPUS_COLOR_E3, st);
+    }
     opus_page_text(me, 4, 284, 11, 12, OPUS_COLOR_E4, "mix");
     /* DARK (shift + orange, the Opus port's own): under the mix bar while it is set, shift is held or it just moved */
     {

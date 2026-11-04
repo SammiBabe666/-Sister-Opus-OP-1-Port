@@ -56,6 +56,11 @@ void opus_page_text(struct opl_self *self, int slot, int x, int y, int size, int
         fprintf(svg, "<text x=\"%d\" y=\"%.2f\" font-size=\"%d\" fill=\"%s\" class=\"t\">%s</text>\n", x, y + size * 0.86, size,
                 col(colour), text);
 }
+void opus_page_text_right(struct opl_self *self, int slot, int x, int y, int size, int colour, const char *text)
+{
+    (void)self; (void)slot;
+    if (svg) fprintf(svg, "<text x=\"%d\" y=\"%.2f\" font-size=\"%d\" fill=\"%s\" class=\"t\" text-anchor=\"end\">%s</text>\n", x, y + size * 0.86, size, col(colour), text);
+}
 unsigned opus_accent_now(int i) { static const unsigned c[4] = { 0x698EFF, 0x00ED95, 0xFFFFFF, 0xFF3A5D }; return c[i & 3]; }
 int fw_shift_held(void) { return shift; }
 
@@ -105,6 +110,8 @@ int main(int argc, char **argv)
     shot(argv[1], "3-pipes-playing", 19661, 32767, 0, 20000, 6, 0, 0);
     shot(argv[1], "4-cathedral-vesper-wet", 32767, 16000, 32767, 32767, 6, 0, 0);
     shot(argv[1], "5-chapel-dry-shift-key", 0, 0, 0, 0, 0, 1, 0);
+    shot(argv[1], "6-swell-50-playing", 19661, 6554, 16384, 11469, 6, 0, 0);
+    shot(argv[1], "7-swell-99-playing", 19661, 6554, 32767, 11469, 6, 0, 0);
     shot(argv[1], "2-defaults-playing-OFF", 19661, 6554, 0, 11469, 6, 0, 1);
     shot(argv[1], "3-pipes-playing-OFF", 19661, 32767, 0, 20000, 6, 0, 1);
     return 0;

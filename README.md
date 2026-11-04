@@ -22,6 +22,8 @@ rings in tune (PIPES: root/fifth/octave combs) or swells backwards (VESPER). Thi
 | White | SWELL | forward tail → fully reversed (VESPER) |
 | Orange | MIX | exactly dry → wet only |
 
+- **SWELL on the page (this port's):** the label shows its value (`swell 0`..`swell 99`), the candle flames grow to
+  three times their height at 99, and a glow ring round each flame widens and brightens with it.
 - **Shift + orange: DARK — exclusive to this Opus version.** Darkens the reverb: lowers the tank's damping corner and the
   pipes' brightness (up to 70 %) and closes a low-pass on the wet down to ~430 Hz. At 0 it is SISTER exactly as
   Hundekraft made it (byte-identical output). On the page night falls: the nave dims, the flames burn low and amber, a

@@ -249,7 +249,7 @@ int main(void)
         }
         assert(frames_drawn == 399 && strokes_bad == 0);
         assert(art_draws == 1 && puts_ == frames_drawn - 1);
-        assert(!strcmp(text_seen[0], "space") && !strcmp(text_seen[3], "swell") && !strcmp(text_seen[4], "mix"));
+        assert(!strcmp(text_seen[0], "space") && !strncmp(text_seen[3], "swell", 5) && !strcmp(text_seen[4], "mix"));
         assert(!strcmp(text_seen[1], "00"));
         printf("  green label with shift held: \"%s\"\n", text_seen[2]);
         assert(!strncmp(text_seen[2], "key ", 4));
