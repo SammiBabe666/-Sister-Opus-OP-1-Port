@@ -109,7 +109,7 @@ static int16_t rnd(void) { rng = rng * 1664525u + 1013904223u; return (int16_t)(
 struct inst { struct opus_fx fx; };
 static void make(struct inst *in, int stereo, void *bulk, void *fast)
 {
-    struct opus_need n = { 0, 0, 0 };
+    struct opus_need n = { 0, 0, 0, 0 };
     reg->need(stereo, &n);
     in->fx.state = calloc(1, n.state);
     in->fx.bulk = bulk ? bulk : calloc(1, n.bulk);
@@ -129,7 +129,7 @@ int main(void)
     assert(!memcmp(reg->defaults, defs, sizeof defs));
     for (int i = 0; i < 4; i++) assert(reg->limits[i][0] == 0 && reg->limits[i][1] == 32767 && reg->limits[i][2] > 0);
     for (int i = 4; i < 8; i++) assert(reg->limits[i][2] == 0);
-    struct opus_need nm = { 0, 0, 0 }, ns = { 0, 0, 0 };
+    struct opus_need nm = { 0, 0, 0, 0 }, ns = { 0, 0, 0, 0 };
     reg->need(0, &nm); reg->need(1, &ns);
     printf("need: state %u, bulk %u (si_state %u), fast %u mono / %u master; page memory %u\n", nm.state, nm.bulk,
            (unsigned)sizeof(si_state), nm.fast, ns.fast, allocs);
@@ -210,7 +210,7 @@ int main(void)
         /* a green push on the page: cents */
         short vp[8] = { 19661, 6554, 0, 11469, 0, 0, 16384, 0 };
         struct opus_fx_view v;
-        h_begin(); reg->view(vp, &v); h_begin();
+        sister_host_cycles += 400000u * 35u; h_begin(); reg->view(vp, &v); sister_host_cycles += 400000u * 35u; h_begin();
         assert(h_key(0x3C, 1) == 1 && h_key(0x3C, 0) == 1 && sister_key_cents_mode == 1);
         p[6] = (short)sister_semi_word(700);
         assert(reg->shift_knob(p, 1, 13) == 1 && sister_key_of(p[6]) == 713);
@@ -218,11 +218,11 @@ int main(void)
         p[6] = (short)sister_semi_word(-2300);
         assert(reg->shift_knob(p, 1, -500) == 1 && sister_key_of(p[6]) == -2399 && p[6] > 0);
         p[6] = (short)sister_semi_word(700);
-        h_begin(); reg->view(vp, &v); h_begin();
+        sister_host_cycles += 400000u * 35u; h_begin(); reg->view(vp, &v); sister_host_cycles += 400000u * 35u; h_begin();
         assert(h_key(0x3C, 1) == 1 && h_key(0x3C, 0) == 1 && sister_key_cents_mode == 0);
         assert(reg->shift_knob(p, 1, 1) == 1 && sister_key_of(p[6]) == 800);   /* snapped back to whole semitones */
         /* off the page, a green push is the OS's */
-        for (int i = 0; i < 10; i++) h_begin();
+        for (int i = 0; i < 10; i++) { sister_host_cycles += 400000u * 35u; h_begin(); }
         assert(h_key(0x3C, 1) == 0 && h_key(0x3C, 0) == 0 && h_key(0x3B, 1) == 0);
     }
     puts("5 shift + green: semitones, cents after a green push, clamps, word law round-trips every cent: PASS");
@@ -231,7 +231,7 @@ int main(void)
     {
         struct opus_fx_view v;
         unsigned s0 = strokes;
-        for (int i = 0; i < 5; i++) { h_begin(); h_under(frame); }
+        for (int i = 0; i < 5; i++) { sister_host_cycles += 400000u * 35u; h_begin(); h_under(frame); }
         assert(strokes == s0);                            /* no view: nothing drawn */
         short vp[8] = { 19661, 6554, 0, 11469, 0, 0, 16384, 0 };
         unsigned frames_drawn = 0, maxs = 0;
@@ -259,8 +259,8 @@ int main(void)
         printf("  green label with shift held: \"%s\"\n", text_seen[2]);
         assert(!strncmp(text_seen[2], "key ", 4));
         shift = 0;
-        h_begin(); h_under(frame); reg->view(vp, &v);
-        for (int i = 0; i < 60; i++) { h_begin(); h_under(frame); reg->view(vp, &v); }
+        sister_host_cycles += 400000u * 35u; h_begin(); h_under(frame); reg->view(vp, &v);
+        for (int i = 0; i < 60; i++) { sister_host_cycles += 400000u * 35u; h_begin(); h_under(frame); reg->view(vp, &v); }
         assert(!strcmp(text_seen[2], "voice"));
         printf("  %u frames drawn, at most %u strokes a frame, %u texts, art drawn %u time(s)\n", frames_drawn, maxs, texts,
                art_draws);
@@ -279,7 +279,7 @@ int main(void)
                     if (!phase) for (int b = 0; b < 23; b++) { for (int i = 0; i < 64; i++) l[i] = (int16_t)(rnd() / 4); reg->mono(&syn.fx, l, vp); }
                     if (phase && f == 2) vp[0] = (short)(vp[0] ^ 0x1000);   /* a knob turned while off: still on the page */
                     strokes_colour = strokes_grey = 0;
-                    h_begin(); h_under(frame); reg->view(vp, &v);
+                    sister_host_cycles += 400000u * 35u; h_begin(); h_under(frame); reg->view(vp, &v);
                     if (f >= 4) {                                  /* settled: the state shows */
                         if (phase) assert(strokes_colour == 0 && strokes_grey > 300 && last_put == 0x4321);
                         else { if (!(strokes_colour > 250 && last_put == 0x1234)) fprintf(stderr, "cycle %d f %d colour %u grey %u put %x\n", cycle, f, strokes_colour, strokes_grey, last_put); assert(strokes_colour > 250 && last_put == 0x1234); }
@@ -319,6 +319,49 @@ int main(void)
         assert(hi[1] / all[1] < 0.25 * hi[0] / all[0]);
     }
     puts("8 dark: shift + orange sets word 7, the wet loses most of its top, tails still end in exact silence: PASS");
+    /* 10: Beta 4 still screens: frames every 4th display period (~140 ms): off still detected, the key text times out
+       on the clock (1.5 s), not on a count of frames */
+    {
+        struct opus_fx_view v;
+        short vp[8] = { 19661, 6554, 0, 11469, 0, 0, 16384, 0 };
+        mock_owner = 0; mock_page = 1;
+        for (int f = 0; f < 6; f++) {                       /* running, slow frames: coloured */
+            for (int b = 0; b < 96; b++) { for (int i = 0; i < 64; i++) l[i] = 0; reg->mono(&syn.fx, l, vp); }
+            strokes_colour = strokes_grey = 0; sister_host_cycles += 400000u * 140u; h_begin(); h_under(frame); reg->view(vp, &v);
+            assert(strokes_colour > 250);
+        }
+        for (int f = 0; f < 3; f++) { strokes_colour = strokes_grey = 0; sister_host_cycles += 400000u * 140u; h_begin(); h_under(frame); reg->view(vp, &v); }
+        assert(strokes_colour == 0 && strokes_grey > 250);   /* stopped: grey within two slow frames */
+        short p[8] = { 0, 0, 0, 0, 0, 0, 16384, 0 };
+        reg->shift_knob(p, 1, 2);                            /* the key shows for 1.5 s */
+        for (int f = 0; f < 6; f++) { sister_host_cycles += 400000u * 140u; h_begin(); h_under(frame); reg->view(vp, &v); }
+        assert(!strncmp(text_seen[2], "key ", 4));           /* 0.84 s: still the key */
+        for (int f = 0; f < 6; f++) { sister_host_cycles += 400000u * 140u; h_begin(); h_under(frame); reg->view(vp, &v); }
+        assert(!strcmp(text_seen[2], "voice"));              /* 1.68 s: back to voice */
+        struct opus_need nd = { 0, 0, 0, 0 };
+        reg->need(1, &nd);
+        assert(nd.fast_moves == OPUS_FAST_STATE + 1);
+    }
+    {   /* the core moves the fast part (bytes kept, a new address) every 300 blocks: output still SISTER's exactly */
+        struct inst mv; make(&mv, 1, 0, 0);
+        static si_state ref;
+        si_init(&ref);
+        struct opus_need nd = { 0, 0, 0, 0 };
+        reg->need(1, &nd);
+        void *bufs[2] = { mv.fx.fast, aligned_alloc(32, (nd.fast + 31) & ~31u) };
+        short pp[8] = { 26000, 20000, 9000, 22000, 0, 0, 18000, 9000 };
+        for (unsigned blk = 0; blk < 3000; blk++) {
+            if (blk && blk % 300 == 0) { void *to = bufs[(blk / 300) & 1]; memcpy(to, mv.fx.fast, nd.fast); mv.fx.fast = to; }
+            for (int i = 0; i < 64; i++) { a[i] = l[i] = (int16_t)(rnd() / 3); b[i] = r[i] = (int16_t)(rnd() / 3); }
+            reg->stereo(&mv.fx, l, r, pp);
+            int32_t q[4] = { pp[0], pp[1], pp[2], pp[3] };
+            ref.dark = pp[7];
+            si_process(&ref, a, b, q, sister_key_of(pp[6]));
+            assert(!memcmp(l, a, sizeof l) && !memcmp(r, b, sizeof r));
+        }
+    }
+    puts("10 beta 4: fast memory on lease (state kept, moved every 300 blocks: output exact); slow still-screen frames: off detected, timers on the clock: PASS");
+
     /* 9: the page is found as ROOMS finds it: opus_fx_page_shown, our view, the same owner; the instance by position */
     {
         struct opus_fx_view v;
@@ -329,20 +372,20 @@ int main(void)
         mock_owner = 0;
         for (int f = 0; f < 8; f++) {
             for (int b = 0; b < 23; b++) { for (int i = 0; i < 64; i++) l[i] = 0; mock_instr = 0; reg->mono(&syn.fx, l, vp); }
-            strokes_colour = strokes_grey = 0; h_begin(); h_under(frame); reg->view(vp, &v);
+            strokes_colour = strokes_grey = 0; sister_host_cycles += 400000u * 35u; h_begin(); h_under(frame); reg->view(vp, &v);
         }
         assert(strokes_colour > 250);
         /* the master's page (owner 16): the master instance has not run: grey, though the synth runs */
         mock_owner = 16;
         for (int f = 0; f < 8; f++) {
             for (int b = 0; b < 23; b++) { for (int i = 0; i < 64; i++) l[i] = 0; reg->mono(&syn.fx, l, vp); }
-            strokes_colour = strokes_grey = 0; h_begin(); h_under(frame); reg->view(vp, &v);
+            strokes_colour = strokes_grey = 0; sister_host_cycles += 400000u * 35u; h_begin(); h_under(frame); reg->view(vp, &v);
         }
         assert(strokes_colour == 0 && strokes_grey > 250);
         /* ...and coloured once the master runs */
         for (int f = 0; f < 8; f++) {
             for (int b = 0; b < 23; b++) { for (int i = 0; i < 64; i++) { l[i] = 0; r[i] = 0; } reg->stereo(&m9.fx, l, r, vp); }
-            strokes_colour = strokes_grey = 0; h_begin(); h_under(frame); reg->view(vp, &v);
+            strokes_colour = strokes_grey = 0; sister_host_cycles += 400000u * 35u; h_begin(); h_under(frame); reg->view(vp, &v);
         }
         assert(strokes_colour > 250);
         /* the core says no effect page shows: nothing drawn, a green push is the OS's */

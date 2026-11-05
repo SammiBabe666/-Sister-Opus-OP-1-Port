@@ -136,7 +136,7 @@ int main(int argc, char **argv)
     if (argc < 2) return 2;
     struct opl_self self = { sizeof(struct opl_self), "sammi.sister", "/yaffs2/mod/sammi.sister", 0 };
     if (opl_init(&self)) return 1;
-    struct opus_need n = { 0, 0, 0 };
+    struct opus_need n = { 0, 0, 0, 0 };
     reg->need(1, &n);
     struct opus_fx fx = { calloc(1, n.state), calloc(1, n.bulk), aligned_alloc(32, (n.fast + 31) & ~31u), 1 };
     reg->init(&fx);

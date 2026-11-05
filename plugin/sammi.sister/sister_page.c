@@ -33,10 +33,14 @@ static const uint8_t green[4] = { 0x00, 0xED, 0x95, 255 };
 static const uint8_t teal[4] = { 0x0B, 0x9A, 0x9E, 255 };
 
 static int32_t e_depth = -1, e_xc, e_vow[2], e_lit, e_mix, e_flame[3], e_flick[3], e_green, e_fast, e_slow, e_mid, e_breath, e_dark, e_swell;
-static uint32_t frames, rng = 0x2545F491u;
+static uint32_t rng = 0x2545F491u;
 
 /* the page: frame clock (display thread) and what `view` saw */
-static volatile unsigned frame_no, view_frame = 0x80000000u, key_until, dark_until;
+static volatile unsigned frame_no, view_frame = 0x80000000u;
+/* the page's clock: ms from the CPU's cycle counter (400 a us), advanced at each frame's start. Beta 4 (core 2.21 on)
+   draws a still screen only every fourth frame, so frames are no clock (api.md, Frames) */
+static volatile uint32_t now_ms, key_until, dark_until;
+static uint32_t clock_cyc, clock_rem;
 static volatile int view_owner = -1;                 /* the effect page's owner when `view` last ran (opus_fx_owner) */
 static short view_par[8];
 static unsigned last_cycles;
@@ -195,20 +199,17 @@ static const struct sister_inst *shown(void)
     return sister_last[o >= 16 ? 2 : (o >= 8 ? 1 : 0)];
 }
 
-/* on: the shown instance's process ran within the last frames. Opus has no on/off query for an effect; the OS runs an
-   effect's process only while it is on, so blocks counted (as ROOMS counts them) are the real run state. A block is
-   1.45 ms, a frame ~33 ms: ~23 blocks a frame; 4 frames without one, ~0.13 s, is off. No instance yet: off. */
+/* on: the shown instance's process ran lately. Opus has no on/off query for an effect; the OS runs an effect's process
+   only while it is on, so blocks counted (as ROOMS counts them) are the real run state. A block is 1.45 ms; no new
+   block for 120 ms (on the clock, not frames) is off. A newly seen instance counts as running until then. */
 static int running(const struct sister_inst *in)
 {
     static const struct sister_inst *seen;
-    static uint32_t last_blocks;
-    static unsigned idle = 1000;
+    static uint32_t last_blocks, last_ms;
     if (!in) return 0;
     const uint32_t b = in->blocks;
-    if (in != seen) { seen = in; last_blocks = b; idle = 3; }   /* a new instance: one frame to show it runs */
-    else if (b != last_blocks) { last_blocks = b; idle = 0; }
-    else if (idle < 1000) idle++;
-    return idle < 4;
+    if (in != seen || b != last_blocks) { seen = in; last_blocks = b; last_ms = now_ms; }
+    return now_ms - last_ms <= 120u;
 }
 
 /* the still art: drawn once on the cleared frame (its normal colours, or grey for off: two kept copies), its lit pixels
@@ -254,7 +255,6 @@ static void draw(void)
     if (dt <= 0 || dt > 200) dt = 33;
     const int32_t a = (int32_t)((int64_t)dt * 32768 / (dt + 110));        /* ~110 ms time constant */
     const int32_t af = (int32_t)((int64_t)dt * 32768 / (dt + 45));         /* flames, faster */
-    frames++;
 
     /* targets: the depth step between column pairs (Q12, 0.17 .. 0.64, 0.34 at the default SPACE 60) */
     const int32_t t_depth = SISTER_D_MIN + (int32_t)((((int64_t)k[0] * k[0] >> 15) * SISTER_D_K) >> 15);
@@ -409,7 +409,9 @@ static void draw(void)
         blend(fl, white, amber, e_dark);
         const int c_white = rgb(fl);
         for (unsigned c3 = 0; c3 < 3; c3++) {
-            if (!fx_off && (frames + c3 * 3) % 4 == 0) {                         /* a new flicker target now and then, eased toward */
+            static uint32_t flick_at[3];
+            if (!fx_off && (int32_t)(now_ms - flick_at[c3]) >= 0) {          /* a new flicker target every ~133 ms (kennel: 4 frames), eased toward */
+                flick_at[c3] = now_ms + 133u;
                 rng = rng * 1664525u + 1013904223u;
                 e_flick[c3] = (int32_t)(rng >> 17) - 16384;            /* -16384 .. 16383 */
             }
@@ -468,7 +470,8 @@ static void draw(void)
         const unsigned motes = 2 + (unsigned)(e_dark * 8 / 32768);              /* 2 .. 9 */
         for (unsigned i = 0; i < motes; i++) {
             const uint32_t cyc = 2600 + i * 337;                                  /* frames x 10 per fall */
-            const int32_t ph = (int32_t)((frames * (10 + i % 3 * 3) + i * 977u) % cyc);
+            const uint32_t vf = now_ms * 3u / 100u;                               /* 30 a second, from the clock */
+            const int32_t ph = (int32_t)((vf * (10 + i % 3 * 3) + i * 977u) % cyc);
             const int32_t y = (14 + ph * 124 / (int32_t)cyc) * 1024;
             const int32_t x = (104 + (int32_t)((i * 53u) % 112)) * 1024 + ((ph / 40 & 1) ? 300 : -300);
             int32_t edge = ph < 300 ? ph : (int32_t)cyc - ph < 300 ? (int32_t)cyc - ph : 300;  /* fade in and out */
@@ -491,7 +494,7 @@ static void draw(void)
     struct opl_self *me = sister_self;
     opus_page_text(me, 0, 14, 11, 12, OPUS_COLOR_E1, "space");
     opus_page_text(me, 1, 14, 27, 30, OPUS_COLOR_TEXT, number);
-    if (sister_shift_held() || (int)(key_until - frame_no) > 0 || sister_key_cents_mode) {   /* the PIPES key */
+    if (sister_shift_held() || (int32_t)(key_until - now_ms) > 0 || sister_key_cents_mode) {   /* the PIPES key */
         static const char names[12][3] = { "c", "c#", "d", "d#", "e", "f", "f#", "g", "g#", "a", "a#", "b" };   /* the font has no capitals */
         const int32_t cents = sister_key_of(view_par[6]);
         int32_t semi = (cents + 2400 + 50) / 100;                /* 0 .. 48 from C1 */
@@ -527,7 +530,7 @@ static void draw(void)
     /* DARK (shift + orange, the Opus port's own): under the mix bar while it is set, shift is held or it just moved */
     {
         const unsigned dv = ((unsigned)(view_par[7] < 0 ? 0 : view_par[7]) * 99u + 16383u) >> 15;
-        if (dv || sister_shift_held() || (int)(dark_until - frame_no) > 0) {
+        if (dv || sister_shift_held() || (int32_t)(dark_until - now_ms) > 0) {
             char dt[10] = "dark ";
             unsigned n = 5;
             if (dv >= 10) dt[n++] = (char)('0' + dv / 10);
@@ -540,7 +543,17 @@ static void draw(void)
 }
 
 /* ---- the hooks ---- */
-static void frame_begin(void) { frame_no++; }
+static void frame_begin(void)
+{
+    const uint32_t c = cycles();
+    if (clock_cyc) {
+        const uint32_t d = c - clock_cyc + clock_rem;    /* frames come at least every ~140 ms: no wrap of 32 bits */
+        now_ms += d / 400000u;
+        clock_rem = d % 400000u;
+    }
+    clock_cyc = c;
+    frame_no++;
+}
 
 static void frame_under(unsigned short *buf)
 {
@@ -567,8 +580,8 @@ void sister_view(const short *par, struct opus_fx_view *v)
     v->caption = 0;
 }
 
-void sister_key_touched(void) { key_until = frame_no + 45; }        /* ~1.5 s at the display's ~30 frames a second */
-void sister_dark_touched(void) { dark_until = frame_no + 45; }
+void sister_key_touched(void) { key_until = now_ms + 1500u; }       /* 1.5 s on the clock */
+void sister_dark_touched(void) { dark_until = now_ms + 1500u; }
 
 /* a green push while SISTER's page shows: shift + green moves the key by semitones or by cents (kennel's press page:
    a turn a semitone, shift + turn a cent). The release of a push taken is taken too. */

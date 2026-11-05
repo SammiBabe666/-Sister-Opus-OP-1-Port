@@ -9,7 +9,7 @@ rings in tune (PIPES: root/fifth/octave combs) or swells backwards (VESPER). Thi
 **Download:** `dist/darksister.opmod` (or the release ZIP in `dist/`).
 
 ## Install
-1. OP-1 with Opus 2 (core 2.2 or later: 2.0 beta 3.x). Developer mode on for the first tries (Opus menu: synth+drum+tape+mixer, T1).
+1. OP-1 with Opus 2.0 beta 4 (core 2.21 or later; RC1 is core 2.30). Developer mode on for the first tries (Opus menu: synth+drum+tape+mixer, T1).
 2. Disk mode (shift + COM, T3), copy `darksister.opmod` into the disk's `mods` folder, eject, restart.
 3. Opus menu → T2 (mods list): the `dark sister` row should say "loaded".
 4. Pick **dark sister** (shown as DARK SISTER) in the synth, drum or master effect list like any effect.
@@ -58,6 +58,19 @@ then either). **Assumption, not verified on hardware:** that the OS stops callin
   `sister_screen.c` drawn under the effect page), `manifest.txt`, `cpu.txt`.
 - Synth and drum share one SISTER state (Opus gives their instances one bulk; R246 runs one at a time). Master is separate.
 
+## Beta 4 (1.2.0)
+
+What changed for Opus 2.0 beta 4, and only that (the sound is identical; `sister_render` output byte-identical to
+Hundekraft's at DARK 0):
+- **Fast memory on lease** (`need.fast_moves = OPUS_FAST_STATE + 1`): the core may move Sister's 5.4 / 1.9 KB fast part
+  to where the playing instances need it. `si_process_l1` takes every pointer from `fx->fast` each block, and a move is
+  seen as a new address (the tables are filled once more). Host test 10 moves it every 300 blocks: output exact.
+- **`bulk` may move at each `init`**: `init` now clears the "tables filled" flag kept there.
+- **Still screens draw every fourth frame**: the page's off detection (120 ms without a block), the key and dark
+  readouts (1.5 s), candle flicker (~133 ms) and dust motes now run on the CPU's cycle counter, not on frame counts.
+- Built with the Beta 4 kit's flags (adds `-ffunction-sections -fdata-sections -fno-indirect-inlining`). `priority` is
+  left normal (no line) until a device measurement shows Sister needs `high`.
+
 ## Device testing and new Opus releases
 
 - `CHECKLIST.md`: the OP-1 checklist (install, function, CPU, load-together, sign-off) with a results table.
@@ -71,16 +84,17 @@ contains no compiler or compiler build scripts.
 
 ```
 . ~/mnt/Documents/op1-toolchain/env.sh      # sets OP1_BFIN_TOOLCHAIN (or point it at any bfin-elf GCC 13.3.0 toolchain)
-./build.sh [OPUS_KIT_REPO]                  # the Opus repo (plugin-kit/ inside) at d7f28b0; cloned if not given
+./build.sh ~/path/to/opus2-plugin-kit      # unzipped from opus2-plugin-kit-beta4-rc1.zip (Beta 4 RC1)
 ```
 
-Target: Opus 2.0 beta 3.2 (plugin kit `d7f28b0`, API up to core 2.13). The manifest's `core 2.2` is the lowest core whose services Sister calls
-(the effect-page queries `opus_fx_page_shown`, `opus_fx_owner`, `opus_instrument_now` are core 2.2).
+Target: Opus 2.0 beta 4 RC1 (build 6, core 2.30; kit `opus2-plugin-kit-beta4-rc1.zip`). `core 2.21` is the lowest core
+with every service Sister uses: the effect-page queries (2.2) and `fast_moves` (2.21: fast memory on lease).
 
 ## Test results — what was and was not done
 | Level | Result |
 |---|---|
-| Compilation | PASS on the shared toolchain (GCC 13.3.0 + binutils 2.38, the kit's spec): `plugin_tool.py build` with `-Wall -Wextra -Werror`; `show` reads it back (17 imports, 48,416-byte image). Reproducible: two builds give SHA-256 `a1043dc0…6a0101`. SVG passes the kit's `svg` check. |
+| Compilation, Beta 4 RC1 kit | PASS: `plugin_tool.py build` (core 2.30 kit, warnings are errors), `show`: core 2.21, 21 imports, `deep fw_shift_held`, 51,168-byte image; reproducible (SHA-256 `89400ace…a0c8b4`). Host tests 10/10 against the Beta 4 headers |
+| Compilation (1.1.x, beta 3.2 kit) | PASS on the shared toolchain (GCC 13.3.0 + binutils 2.38, the kit's spec): `plugin_tool.py build` with `-Wall -Wextra -Werror`; `show` reads it back (17 imports, 48,416-byte image). Reproducible: two builds give SHA-256 `a1043dc0…6a0101`. SVG passes the kit's `svg` check. |
 | SISTER's own host tests (`sister_test.c`, ASan/UBSan) | PASS |
 | SISTER's `check.py` audio checks on the shipped DSP (clicks, pipe tuning, VESPER, levels, stereo) | PASS, 63/63 |
 | Page detection (host test 9) | PASS: drawn only when `opus_fx_page_shown()` and the owner match; the instance shown is the owner's (synth/drum/master) |

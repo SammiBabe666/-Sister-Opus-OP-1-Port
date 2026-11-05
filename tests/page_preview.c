@@ -78,7 +78,7 @@ static void shot(const char *dir, const char *name, short k0, short k1, short k2
     static struct opus_fx fx;
     static int made;
     if (!made) {
-        struct opus_need n = { 0, 0, 0 };
+        struct opus_need n = { 0, 0, 0, 0 };
         reg->need(0, &n);
         fx.state = calloc(1, n.state); fx.bulk = calloc(1, n.bulk); fx.fast = aligned_alloc(32, (n.fast + 31) & ~31u); fx.stereo = 0;
         reg->init(&fx);

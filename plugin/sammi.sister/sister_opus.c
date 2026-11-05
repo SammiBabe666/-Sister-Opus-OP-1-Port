@@ -86,6 +86,9 @@ static void need(int stereo, struct opus_need *n)
     n->state = sizeof(struct sister_inst);
     n->bulk = sizeof(struct sister_bulk);
     n->fast = stereo ? SI_L1_CORE : SI_L1_BYTES;         /* the master partition is smaller in kennel too */
+    /* Beta 4 (core 2.21): the fast part may move, its bytes kept. si_process_l1 takes every pointer from fx->fast at
+       each block and keeps none past it; a move is seen as a new address and the tables are filled again once */
+    n->fast_moves = OPUS_FAST_STATE + 1;
 }
 
 /* Every factory call (a sound loading, the instrument or slot changing), sometimes in the audio interrupt: as kennel's
@@ -97,8 +100,10 @@ static void init(struct opus_fx *fx)
     struct sister_bulk *b = (struct sister_bulk *)fx->bulk;
     in->pos.valid = 0;
     in->stereo = fx->stereo;
-    if (b)
+    if (b) {                                             /* bulk may lie elsewhere after each init (core 2.21) */
+        b->fast_filled = 0;
         si_init(&b->s);
+    }
 }
 
 static void process(struct opus_fx *fx, short *l, short *r, const short *par)
