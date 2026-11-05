@@ -23,7 +23,7 @@
  *    where kennel showed it on green's press page.
  */
 #include "opus_plugin.h"
-#include "op1fw.h"
+#include "sister_fw.h"
 #include "sister_geom.h"
 #include "sister_opus.h"
 #include "sister_art.h"
@@ -37,6 +37,7 @@ static uint32_t frames, rng = 0x2545F491u;
 
 /* the page: frame clock (display thread) and what `view` saw */
 static volatile unsigned frame_no, view_frame = 0x80000000u, key_until, dark_until;
+static volatile int view_owner = -1;                 /* the effect page's owner when `view` last ran (opus_fx_owner) */
 static short view_par[8];
 static unsigned last_cycles;
 volatile int sister_key_cents_mode;
@@ -67,7 +68,12 @@ static unsigned grey_of(unsigned c)
 static int col(unsigned c) { return OPUS_RGB(fx_off ? grey_of(c) : c); }
 static int rgb(const uint8_t *c) { return col(((unsigned)c[0] << 16) | ((unsigned)c[1] << 8) | c[2]); }
 
-static int page_showing(void) { return frame_no - view_frame <= 2u; }
+/* SISTER's page shows: an effect page shows (the core says so), it is this type's (our `view` ran within two frames)
+   and its owner has not changed since (as ROOMS, Reverb and Stutter) */
+static int page_showing(void)
+{
+    return opus_fx_page_shown() && frame_no - view_frame <= 2u && opus_fx_owner() == view_owner;
+}
 
 /* Q10 screen coordinates; clipped to the visible rows like Father's helper (kennel's line, unchanged but the call) */
 static void line(int x, int y, int xx, int yy, int width, int colour)
@@ -181,22 +187,17 @@ unsigned sister_host_cycles;                       /* the host tests (tests/opus
 static inline unsigned cycles(void) { return sister_host_cycles; }
 #endif
 
-/* the instance this page shows: the master's when its last knobs are the page's and the mono one's are not, the mono
-   one's when its are; otherwise (knobs turned while it is off, an LFO between the two copies) the last one chosen */
-static const struct sister_inst *shown(const int32_t k[4])
+/* the instance this page shows: the one that last ran at the page owner's position (owner 0-7 the synth's slots, 8-15
+   the drum's, 16 the master), as ROOMS does */
+static const struct sister_inst *shown(void)
 {
-    static const struct sister_inst *last;
-    const struct sister_inst *m = sister_last[1], *s = sister_last[0];
-#define SAME(i) ((i) && (i)->pos.valid && (i)->pos.raw[0] == k[0] && (i)->pos.raw[1] == k[1] && (i)->pos.raw[2] == k[2] && (i)->pos.raw[3] == k[3])
-    if (SAME(m) && !SAME(s)) last = m;
-    else if (SAME(s)) last = s;
-    else if (!last) last = s ? s : m;
-#undef SAME
-    return last;
+    const int o = view_owner;
+    return sister_last[o >= 16 ? 2 : (o >= 8 ? 1 : 0)];
 }
 
-/* on: the shown instance's process ran within the last frames (a block is 1.45 ms, a frame ~33 ms: ~23 blocks a frame;
-   4 frames without a block, ~0.13 s, is off). No instance yet: off. */
+/* on: the shown instance's process ran within the last frames. Opus has no on/off query for an effect; the OS runs an
+   effect's process only while it is on, so blocks counted (as ROOMS counts them) are the real run state. A block is
+   1.45 ms, a frame ~33 ms: ~23 blocks a frame; 4 frames without one, ~0.13 s, is off. No instance yet: off. */
 static int running(const struct sister_inst *in)
 {
     static const struct sister_inst *seen;
@@ -244,7 +245,7 @@ static void draw(void)
     int32_t k[4];
     for (int i = 0; i < 4; i++) k[i] = view_par[i] < 0 ? 0 : view_par[i];
     static const si_pos_t none;
-    const struct sister_inst *in = shown(k);
+    const struct sister_inst *in = shown();
     fx_off = !running(in);
     const si_pos_t *P = in ? &in->pos : &none;
     const unsigned c = cycles();
@@ -490,7 +491,7 @@ static void draw(void)
     struct opl_self *me = sister_self;
     opus_page_text(me, 0, 14, 11, 12, OPUS_COLOR_E1, "space");
     opus_page_text(me, 1, 14, 27, 30, OPUS_COLOR_TEXT, number);
-    if (fw_shift_held() || (int)(key_until - frame_no) > 0 || sister_key_cents_mode) {   /* the PIPES key */
+    if (sister_shift_held() || (int)(key_until - frame_no) > 0 || sister_key_cents_mode) {   /* the PIPES key */
         static const char names[12][3] = { "c", "c#", "d", "d#", "e", "f", "f#", "g", "g#", "a", "a#", "b" };   /* the font has no capitals */
         const int32_t cents = sister_key_of(view_par[6]);
         int32_t semi = (cents + 2400 + 50) / 100;                /* 0 .. 48 from C1 */
@@ -526,7 +527,7 @@ static void draw(void)
     /* DARK (shift + orange, the Opus port's own): under the mix bar while it is set, shift is held or it just moved */
     {
         const unsigned dv = ((unsigned)(view_par[7] < 0 ? 0 : view_par[7]) * 99u + 16383u) >> 15;
-        if (dv || fw_shift_held() || (int)(dark_until - frame_no) > 0) {
+        if (dv || sister_shift_held() || (int)(dark_until - frame_no) > 0) {
             char dt[10] = "dark ";
             unsigned n = 5;
             if (dv >= 10) dt[n++] = (char)('0' + dv / 10);
@@ -557,6 +558,7 @@ void sister_view(const short *par, struct opus_fx_view *v)
     static const char *const empty = "";
     for (int i = 0; i < 8; i++) view_par[i] = par[i];
     view_frame = frame_no;
+    view_owner = opus_fx_owner();
     for (int i = 0; i < 4; i++) {
         v->label[i] = empty;
         v->value[i] = empty;

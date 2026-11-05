@@ -9,7 +9,7 @@ rings in tune (PIPES: root/fifth/octave combs) or swells backwards (VESPER). Thi
 **Download:** `dist/darksister.opmod` (or the release ZIP in `dist/`).
 
 ## Install
-1. OP-1 with Opus 2 (core 2.0 or later). Developer mode on for the first tries (Opus menu: synth+drum+tape+mixer, T1).
+1. OP-1 with Opus 2 (core 2.2 or later: 2.0 beta 3.x). Developer mode on for the first tries (Opus menu: synth+drum+tape+mixer, T1).
 2. Disk mode (shift + COM, T3), copy `darksister.opmod` into the disk's `mods` folder, eject, restart.
 3. Opus menu → T2 (mods list): the `dark sister` row should say "loaded".
 4. Pick **dark sister** (shown as DARK SISTER) in the synth, drum or master effect list like any effect.
@@ -36,7 +36,13 @@ rings in tune (PIPES: root/fifth/octave combs) or swells backwards (VESPER). Thi
   and the tail-driven motion (petals singing, flame flicker) settles at the still sketch; labels keep their colours and
   the OS's own "off" overlay still dims the frame as on every effect page. On again: colours and motion return.
 
-### How on/off is detected
+### How the page and on/off are detected
+The page draws only when Opus reports an effect page showing (`opus_fx_page_shown()`), Dark Sister's `view` ran and
+the page's owner (`opus_fx_owner()`) is unchanged, as ROOMS, Reverb and Stutter do; the instance shown is the one at the
+owner's position (synth, drum or master, from `opus_instrument_now()`). The only firmware call (`fw_shift_held`) lives in
+`sister_fw.c`.
+
+#### On/off
 Opus has no call that reports an effect's on/off state, and no documented firmware flag exists for the synth and drum
 effects (only the master's). The OS runs an effect's process call only while it is on, so each instance counts its
 process calls (`sister_inst.blocks`, written by the audio callback), and the page reads the count each frame: no new
@@ -52,6 +58,13 @@ then either). **Assumption, not verified on hardware:** that the OS stops callin
   `sister_screen.c` drawn under the effect page), `manifest.txt`, `cpu.txt`.
 - Synth and drum share one SISTER state (Opus gives their instances one bulk; R246 runs one at a time). Master is separate.
 
+## Device testing and new Opus releases
+
+- `CHECKLIST.md`: the OP-1 checklist (install, function, CPU, load-together, sign-off) with a results table.
+- `tools/opus_kit_diff.py OLD_KIT NEW_KIT [PLUGIN_DIR ...]`: compares two plugin kits (functions, structs, constants,
+  compiler flags, toolchain versions, manifest keywords, core versions) and flags what a plugin uses that changed.
+  Exit 1 when something is flagged. Checked on real kits (beta 1, beta 3, current) and on a simulated breaking kit.
+
 ## Build
 Uses the shared OP-1 Blackfin toolchain (GCC 13.3.0 + binutils 2.38, the Opus kit's specification); this project
 contains no compiler or compiler build scripts.
@@ -61,8 +74,8 @@ contains no compiler or compiler build scripts.
 ./build.sh [OPUS_KIT_REPO]                  # the Opus repo (plugin-kit/ inside) at d7f28b0; cloned if not given
 ```
 
-Target: Opus 2.0 beta 3.2 (plugin kit `d7f28b0`, API up to core 2.13). The manifest's `core 2.0` is deliberate: it is
-the lowest core whose services Sister calls, so every Opus 2 beta loads it.
+Target: Opus 2.0 beta 3.2 (plugin kit `d7f28b0`, API up to core 2.13). The manifest's `core 2.2` is the lowest core whose services Sister calls
+(the effect-page queries `opus_fx_page_shown`, `opus_fx_owner`, `opus_instrument_now` are core 2.2).
 
 ## Test results — what was and was not done
 | Level | Result |
@@ -70,6 +83,7 @@ the lowest core whose services Sister calls, so every Opus 2 beta loads it.
 | Compilation | PASS on the shared toolchain (GCC 13.3.0 + binutils 2.38, the kit's spec): `plugin_tool.py build` with `-Wall -Wextra -Werror`; `show` reads it back (17 imports, 48,416-byte image). Reproducible: two builds give SHA-256 `a1043dc0…6a0101`. SVG passes the kit's `svg` check. |
 | SISTER's own host tests (`sister_test.c`, ASan/UBSan) | PASS |
 | SISTER's `check.py` audio checks on the shipped DSP (clicks, pipe tuning, VESPER, levels, stereo) | PASS, 63/63 |
+| Page detection (host test 9) | PASS: drawn only when `opus_fx_page_shown()` and the owner match; the instance shown is the owner's (synth/drum/master) |
 | Opus glue host test (`tests/opus_host_test.c`, mock core, ASan/UBSan) | PASS: glue output equals SISTER's `si_process` sample-for-sample over 6000 mono + 6000 master blocks with poisoned fast memory; MIX 0 exactly dry; init; key word law; page draws only on its own page, all strokes in bounds |
 | DARK (host test 8; render comparison) | PASS: at DARK 0 the DSP output is byte-identical to Hundekraft's original (3 settings, `sister_render`); at DARK 99 the wet's high-band share drops ~10x and tails still end in exact silence; shift + orange sets it |
 | Page preview (`tests/page_preview.*`, browser render of the recorded strokes) | Matches the Workshop manual's native capture; on and off (`*-OFF.png`) states in `docs/preview/` |

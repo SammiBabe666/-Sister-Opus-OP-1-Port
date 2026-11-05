@@ -4,7 +4,7 @@
  * a browser's renderer: not the OP-1's renderer, font or panel.
  *
  * Copyright (C) 2026 SammiBabe666. GPL-3.0-or-later with the OP-1 firmware permission (NOTICE).
- *   cc -I SDK -I plugin/sammi.sister tests/page_preview.c plugin/sammi.sister/{sister_opus,sister_page,sister_dsp,sister_kern}.c
+ *   cc -I SDK -I plugin/sammi.sister tests/page_preview.c plugin/sammi.sister/{sister_opus,sister_page,sister_fw,sister_dsp,sister_kern}.c
  *   ./a.out OUT_DIR */
 #include "opus_plugin.h"
 #include "op1fw.h"
@@ -63,6 +63,11 @@ void opus_page_text_right(struct opl_self *self, int slot, int x, int y, int siz
 }
 unsigned opus_accent_now(int i) { static const unsigned c[4] = { 0x698EFF, 0x00ED95, 0xFFFFFF, 0xFF3A5D }; return c[i & 3]; }
 int fw_shift_held(void) { return shift; }
+static int mock_page = 1, mock_owner = 0, mock_instr = 0;
+int opus_fx_page_shown(void) { return mock_page; }
+int opus_fx_owner(void) { return mock_owner; }
+int opus_instrument_now(void) { return mock_instr; }
+
 
 static uint32_t rng = 7;
 static int16_t rnd(void) { rng = rng * 1664525u + 1013904223u; return (int16_t)(rng >> 16); }

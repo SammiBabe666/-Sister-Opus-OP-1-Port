@@ -60,6 +60,11 @@ void opus_page_text_right(struct opl_self *self, int slot, int x, int y, int siz
 }
 unsigned opus_accent_now(int i) { return acc[i & 3]; }
 int fw_shift_held(void) { return 0; }
+static int mock_page = 1, mock_owner = 16, mock_instr = 0;   /* the demo shows the master's page */
+int opus_fx_page_shown(void) { return mock_page; }
+int opus_fx_owner(void) { return mock_owner; }
+int opus_instrument_now(void) { return mock_instr; }
+
 
 /* ---- the dry part: soft electric-piano chords and a few plucks, mono-ish, with gaps so the tails are heard ---- */
 #define SR 44160.0

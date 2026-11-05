@@ -47,6 +47,9 @@ volatile int sister_key_cents_mode;
 void sister_page_init(struct opl_self *self) { (void)self; }
 void sister_view(const short *par, struct opus_fx_view *v) { (void)par; (void)v; }
 void sister_key_touched(void) { }
+void sister_dark_touched(void) { }
+int opus_instrument_now(void);
+int opus_instrument_now(void) { return 0; }
 
 static struct sister_inst st[2] __attribute__((aligned(32)));
 static struct sister_bulk bulk[2] __attribute__((aligned(32)));

@@ -19,7 +19,6 @@
  *   SCREEN_sister (an OS screen)                   sister_page.c: the same drawing under the effect page
  */
 #include "opus_plugin.h"
-#include "op1fw.h"
 #include "sister_dsp.h"
 #include "sister_kern.h"
 #include "sister_opus.h"
@@ -52,7 +51,7 @@ void *memset(void *d, int c, unsigned n)
 #endif
 
 struct opl_self *sister_self;
-struct sister_inst *volatile sister_last[2];   /* the last mono and the last master instance that ran (the page) */
+struct sister_inst *volatile sister_last[3];   /* by position (synth, drum, master): the last instance that ran there */
 
 /* kennel's OP1_PRESS_PAGE_SEMI word law (op1_plugin.h, HAIL's PITCH), unchanged: centre 16384 = 0 with a dead band of
  * +-600, then 15784 units for 24 semitones each way; a whole semitone or cent round-trips exactly */
@@ -138,7 +137,7 @@ static void process(struct opus_fx *fx, short *l, short *r, const short *par)
     g->vowel[0] = (int16_t)b->s.vowel[0];
     g->vowel[1] = (int16_t)b->s.vowel[1];
     in->blocks++;
-    sister_last[fx->stereo ? 1 : 0] = in;
+    sister_last[fx->stereo ? 2 : (opus_instrument_now() == 1 ? 1 : 0)] = in;   /* as ROOMS: the position it plays at */
 }
 
 static void mono(struct opus_fx *fx, short *buf, const short *par) { process(fx, buf, 0, par); }

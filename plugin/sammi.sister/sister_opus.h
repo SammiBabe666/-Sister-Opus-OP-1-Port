@@ -24,7 +24,7 @@ struct sister_bulk {
 };
 
 extern struct opl_self *sister_self;
-extern struct sister_inst *volatile sister_last[2];   /* [0] mono (synth/drum), [1] master: the last that ran */
+extern struct sister_inst *volatile sister_last[3];   /* by position: [0] synth, [1] drum, [2] master: the last that ran */
 extern volatile int sister_key_cents_mode;            /* a green push on the page: shift + green moves cents */
 
 int sister_semi_word(int cents);

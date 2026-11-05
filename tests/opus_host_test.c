@@ -96,6 +96,11 @@ void opus_page_text_right(struct opl_self *self, int slot, int x, int y, int siz
 }
 unsigned opus_accent_now(int i) { static const unsigned c[4] = { 0x698EFF, 0x00ED95, 0xADADFF, 0xFF3A5D }; return c[i & 3]; }
 int fw_shift_held(void) { return shift; }
+static int mock_page = 1, mock_owner = 0, mock_instr = 0;
+int opus_fx_page_shown(void) { return mock_page; }
+int opus_fx_owner(void) { return mock_owner; }
+int opus_instrument_now(void) { return mock_instr; }
+
 
 /* ---------------- helpers ---------------- */
 static uint32_t rng = 1;
@@ -314,6 +319,43 @@ int main(void)
         assert(hi[1] / all[1] < 0.25 * hi[0] / all[0]);
     }
     puts("8 dark: shift + orange sets word 7, the wet loses most of its top, tails still end in exact silence: PASS");
+    /* 9: the page is found as ROOMS finds it: opus_fx_page_shown, our view, the same owner; the instance by position */
+    {
+        struct opus_fx_view v;
+        short vp[8] = { 19661, 6554, 0, 11469, 0, 0, 16384, 0 };
+        struct inst m9; make(&m9, 1, 0, 0);
+        unsigned s0;
+        /* the synth's page (owner 0), the synth running: coloured */
+        mock_owner = 0;
+        for (int f = 0; f < 8; f++) {
+            for (int b = 0; b < 23; b++) { for (int i = 0; i < 64; i++) l[i] = 0; mock_instr = 0; reg->mono(&syn.fx, l, vp); }
+            strokes_colour = strokes_grey = 0; h_begin(); h_under(frame); reg->view(vp, &v);
+        }
+        assert(strokes_colour > 250);
+        /* the master's page (owner 16): the master instance has not run: grey, though the synth runs */
+        mock_owner = 16;
+        for (int f = 0; f < 8; f++) {
+            for (int b = 0; b < 23; b++) { for (int i = 0; i < 64; i++) l[i] = 0; reg->mono(&syn.fx, l, vp); }
+            strokes_colour = strokes_grey = 0; h_begin(); h_under(frame); reg->view(vp, &v);
+        }
+        assert(strokes_colour == 0 && strokes_grey > 250);
+        /* ...and coloured once the master runs */
+        for (int f = 0; f < 8; f++) {
+            for (int b = 0; b < 23; b++) { for (int i = 0; i < 64; i++) { l[i] = 0; r[i] = 0; } reg->stereo(&m9.fx, l, r, vp); }
+            strokes_colour = strokes_grey = 0; h_begin(); h_under(frame); reg->view(vp, &v);
+        }
+        assert(strokes_colour > 250);
+        /* the core says no effect page shows: nothing drawn, a green push is the OS's */
+        mock_page = 0;
+        s0 = strokes; h_begin(); h_under(frame);
+        assert(strokes == s0 && h_key(0x3C, 1) == 0 && h_key(0x3C, 0) == 0);
+        /* the owner changed since our view (another slot's page): nothing drawn */
+        mock_page = 1; h_begin(); reg->view(vp, &v); mock_owner = 3; h_begin();
+        s0 = strokes; h_under(frame);
+        assert(strokes == s0);
+        mock_owner = 0;
+    }
+    puts("9 page via opus_fx_page_shown + owner; instance by position (synth, master); hidden page draws nothing: PASS");
     puts("sammi.sister Opus host test PASS");
     return 0;
 }
