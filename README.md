@@ -104,7 +104,7 @@ with every service Sister uses: the effect-page queries (2.2) and `fast_moves` (
 | Off/on (host test 7, mock core) | PASS: with no process calls every FX stroke and the art are grey and the tail motion stops; colours return within a frame of blocks resuming; 6 toggles, knob turned while off, no stale state; art re-kept once per colour |
 | Blackfin simulator (GNU `bfin-elf-run`) | `si_k_mix` asm = C reference once the simulator handles two half-register loads into one register in a parallel instruction (GDB's Blackfin simulator, including gdb-14.2, keeps only the second, so on it the master's left channel differs from the C reference; a simulator limitation, not Sister's). The full 9-regime asm/C/host comparison (`tests/bfin_sim/run_sim.sh`) has not been completed |
 | Opus emulator | **Not performed** (not publicly available) |
-| Physical OP-1 | **Not performed.** No `checked` line in the manifest. |
+| Physical OP-1 | **Works on Opus 2.0 beta 4 RC1** (owner's OP-1, 2026-11-06), recorded as `checked device` in the manifest. The device-tested build's code image is byte-identical to the shipped one (only that manifest line differs). CPU not yet measured: `cpu.txt` is still an estimate. |
 
 ## Known limitations
 - `cpu.txt` (96,000 cycles) is an **estimate** from Hundekraft's unit model, not a measurement. Measure on a device

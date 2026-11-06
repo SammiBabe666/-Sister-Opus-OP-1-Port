@@ -64,7 +64,7 @@ All four effects and one engine at once, to see the memory pool hold:
 
 | Plugin | Version | Opus build | Date | Install | Function | audio: worst | Load-together | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Dark Sister | 1.1.2 | | | | | | | |
+| Dark Sister | 1.2.0 | 2.0 beta 4 RC1 | 2026-11-06 | yes | works (owner's report) | not measured | not run | `checked device` added |
 | ROOMS | | | | | | | | |
 | Reverb | | | | | | | | |
 | Stutter | | | | | | | | |

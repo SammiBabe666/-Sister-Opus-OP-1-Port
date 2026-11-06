@@ -16,3 +16,4 @@ adds      effect dark sister
 uses      green_turn shift modal "pipes key (sister page)"
 uses      green_push modal "key: semitones or cents"
 uses      orange_turn shift modal "dark (sister page)"
+checked   device 2026-11-06 Opus 2.0 beta 4 RC1: works (owner's OP-1)
