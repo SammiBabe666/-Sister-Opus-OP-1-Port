@@ -58,6 +58,19 @@ then either). **Assumption, not verified on hardware:** that the OS stops callin
   `sister_screen.c` drawn under the effect page), `manifest.txt`, `cpu.txt`.
 - Synth and drum share one SISTER state (Opus gives their instances one bulk; R246 runs one at a time). Master is separate.
 
+## 1.2.1: layering fix
+
+On Beta 4 the page was drawn over the OS's "off" popup when the effect was toggled (T3). Opus draws a plugin effect's page
+on the stock effects' layer and its "off" overlay right after that page, and a plugin's under-the-screen handler can
+run after both. Dark Sister now draws its page from inside its `view` call, during the core's own drawing of the effect
+page, so the overlay comes after it and covers it as it covers a stock page. Where `view` has no frame to draw in (an
+older or different core), it falls back to the old path but draws nothing while the effect is off. Host test 11 checks
+both paths on the core's frame order. The sound is unchanged.
+
+`dist/darksister.opmod` 1.2.1 is a test build made with the project's earlier cloud toolchain (GCC 13.3.0 with the
+blackfin-plus-gnu fork's binutils 2.29.51), because the Mac with the shared toolchain was offline; it will be rebuilt
+with the shared GCC 13.3.0 + binutils 2.38.
+
 ## Beta 4 (1.2.0)
 
 What changed for Opus 2.0 beta 4, and only that (the sound is identical; `sister_render` output byte-identical to
@@ -97,6 +110,7 @@ with every service Sister uses: the effect-page queries (2.2) and `fast_moves` (
 | Compilation (1.1.x, beta 3.2 kit) | PASS on the shared toolchain (GCC 13.3.0 + binutils 2.38, the kit's spec): `plugin_tool.py build` with `-Wall -Wextra -Werror`; `show` reads it back (17 imports, 48,416-byte image). Reproducible: two builds give SHA-256 `a1043dc0…6a0101`. SVG passes the kit's `svg` check. |
 | SISTER's own host tests (`sister_test.c`, ASan/UBSan) | PASS |
 | SISTER's `check.py` audio checks on the shipped DSP (clicks, pipe tuning, VESPER, levels, stereo) | PASS, 63/63 |
+| Layering (host test 11, 1.2.1) | PASS: drawn only inside `view` (before the core's "off" overlay), never in the under pass; fallback core: under pass only, nothing while the effect is off |
 | Page detection (host test 9) | PASS: drawn only when `opus_fx_page_shown()` and the owner match; the instance shown is the owner's (synth/drum/master) |
 | Opus glue host test (`tests/opus_host_test.c`, mock core, ASan/UBSan) | PASS: glue output equals SISTER's `si_process` sample-for-sample over 6000 mono + 6000 master blocks with poisoned fast memory; MIX 0 exactly dry; init; key word law; page draws only on its own page, all strokes in bounds |
 | DARK (host test 8; render comparison) | PASS: at DARK 0 the DSP output is byte-identical to Hundekraft's original (3 settings, `sister_render`); at DARK 99 the wet's high-band share drops ~10x and tails still end in exact silence; shift + orange sets it |
@@ -104,7 +118,7 @@ with every service Sister uses: the effect-page queries (2.2) and `fast_moves` (
 | Off/on (host test 7, mock core) | PASS: with no process calls every FX stroke and the art are grey and the tail motion stops; colours return within a frame of blocks resuming; 6 toggles, knob turned while off, no stale state; art re-kept once per colour |
 | Blackfin simulator (GNU `bfin-elf-run`) | `si_k_mix` asm = C reference once the simulator handles two half-register loads into one register in a parallel instruction (GDB's Blackfin simulator, including gdb-14.2, keeps only the second, so on it the master's left channel differs from the C reference; a simulator limitation, not Sister's). The full 9-regime asm/C/host comparison (`tests/bfin_sim/run_sim.sh`) has not been completed |
 | Opus emulator | **Not performed** (not publicly available) |
-| Physical OP-1 | **Works on Opus 2.0 beta 4 RC1** (owner's OP-1, 2026-11-06), recorded as `checked device` in the manifest. The device-tested build's code image is byte-identical to the shipped one (only that manifest line differs). CPU not yet measured: `cpu.txt` is still an estimate. |
+| Physical OP-1 | 1.2.0 **works on Opus 2.0 beta 4 RC1** (owner's OP-1, 2026-11-06), but there the page covered the OS's "off" popup when FX was toggled. **1.2.1 fixes that; not yet confirmed on the OP-1** (its manifest has no `checked` line until it is). CPU not yet measured: `cpu.txt` is still an estimate. |
 
 ## Known limitations
 - `cpu.txt` (96,000 cycles) is an **estimate** from Hundekraft's unit model, not a measurement. Measure on a device

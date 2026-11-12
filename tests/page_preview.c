@@ -99,9 +99,9 @@ static void shot(const char *dir, const char *name, short k0, short k1, short k2
         snprintf(path, sizeof path, "%s/%s.frag.svg", dir, name);
         svg = f == 89 ? fopen(path, "w") : 0;
         h_under(frame);
+        reg->view(par, &v);                         /* 1.2.1: SISTER draws inside view */
         if (svg) fclose(svg);
         svg = 0;
-        reg->view(par, &v);
     }
 }
 

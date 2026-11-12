@@ -63,6 +63,7 @@ static int n_teal = -1, n_white;
    tail-driven motion settled at the still sketch. The labels keep their colours, as the OS's own pages do (the OS's
    "off" overlay dims the whole frame over this, as on every effect page). */
 static int fx_off;
+static int drawn_in_view;                  /* `view` had a frame to draw in: the frame-under path stays quiet (1.2.1) */
 static unsigned grey_of(unsigned c)
 {
     const unsigned y = ((c >> 16 & 255) * 77 + (c >> 8 & 255) * 150 + (c & 255) * 29) >> 8;
@@ -248,6 +249,8 @@ static void draw(void)
     static const si_pos_t none;
     const struct sister_inst *in = shown();
     fx_off = !running(in);
+    if (fx_off && !drawn_in_view)              /* the fallback path draws nothing over the "off" overlay */
+        return;
     const si_pos_t *P = in ? &in->pos : &none;
     const unsigned c = cycles();
     int dt = last_cycles ? (int)((c - last_cycles) / 400000u) : 33;   /* 400 MHz: ms */
@@ -555,6 +558,13 @@ static void frame_begin(void)
     frame_no++;
 }
 
+/* Where the page is drawn (1.2.1, the layering fix). Opus draws a plugin effect's page on the stock effects' layer and
+   its "off" overlay right after that page; a plugin's under-the-screen handler can run after both, so a page drawn
+   there covered the overlay (Beta 4, the owner's OP-1). So SISTER draws from `view`, inside the core's own drawing of
+   the effect page, where the overlay comes after it and covers it as it covers a stock page. Only when `view` is not
+   a drawing call (no frame to draw in: an older or other core) does the frame-under path draw, and then not while
+   the effect is off, so it never lies over the overlay either. */
+
 static void frame_under(unsigned short *buf)
 {
     (void)buf;
@@ -562,6 +572,8 @@ static void frame_under(unsigned short *buf)
         e_depth = -1;                          /* the page comes back at its targets, as kennel's screen init */
         return;
     }
+    if (drawn_in_view)
+        return;
     draw();
 }
 
@@ -578,6 +590,11 @@ void sister_view(const short *par, struct opus_fx_view *v)
     }
     v->waves = 0;
     v->caption = 0;
+    int rows;
+    if (opus_page_pixels(&rows)) {             /* inside the core's page drawing: draw here, under its overlay */
+        drawn_in_view = 1;
+        draw();
+    }
 }
 
 void sister_key_touched(void) { key_until = now_ms + 1500u; }       /* 1.5 s on the clock */

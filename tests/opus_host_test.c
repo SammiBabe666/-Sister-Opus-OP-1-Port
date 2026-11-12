@@ -50,7 +50,8 @@ int opus_art_text(struct opl_self *self, const char *name, const char *svg, unsi
 int opus_art_ready(int a) { return a == 0; }
 void opus_art_draw(int a) { assert(a == 0); art_draws++; }
 static unsigned short frame[376 * 188];
-unsigned short *opus_page_pixels(int *rows) { *rows = 376; return frame; }
+static int in_view, fallback;              /* fallback: a core whose `view` is no drawing call (SISTER_FALLBACK=1) */
+unsigned short *opus_page_pixels(int *rows) { *rows = 376; return in_view && fallback ? 0 : frame; }
 int opus_page_keep(unsigned short *out, unsigned cap, int x0, int x1, int y0, int y1)
 {
     assert(out && cap >= 1024 && x0 == 0 && x1 == 375 && y0 == 0 && y1 == 187);
@@ -119,8 +120,12 @@ static void make(struct inst *in, int stereo, void *bulk, void *fast)
     reg->init(&in->fx);
 }
 
+/* the core's order on a frame: frame_begin, the under pass, its effect page (view inside), then its "off" overlay */
+static void core_view(const short *par, struct opus_fx_view *v) { in_view = 1; reg->view(par, v); in_view = 0; }
+static void layering(void);
 int main(void)
 {
+    fallback = getenv("SISTER_FALLBACK") != 0;
     struct opl_self self = { sizeof(struct opl_self), "sammi.sister", "/yaffs2/mod/sammi.sister", 0 };
     assert(opl_init(&self) == 0);
     /* 1 */
@@ -135,6 +140,7 @@ int main(void)
            (unsigned)sizeof(si_state), nm.fast, ns.fast, allocs);
     assert(nm.fast == SI_L1_BYTES && ns.fast == SI_L1_CORE && nm.bulk >= sizeof(si_state));
     puts("1 registration, defaults, limits, needs: PASS");
+    if (fallback) { layering(); return 0; }
 
     /* 2: synth then drum (sharing bulk and fast, as the core gives them), the master separate */
     struct inst syn, drm, mst;
@@ -210,7 +216,7 @@ int main(void)
         /* a green push on the page: cents */
         short vp[8] = { 19661, 6554, 0, 11469, 0, 0, 16384, 0 };
         struct opus_fx_view v;
-        sister_host_cycles += 400000u * 35u; h_begin(); reg->view(vp, &v); sister_host_cycles += 400000u * 35u; h_begin();
+        sister_host_cycles += 400000u * 35u; h_begin(); core_view(vp, &v); sister_host_cycles += 400000u * 35u; h_begin();
         assert(h_key(0x3C, 1) == 1 && h_key(0x3C, 0) == 1 && sister_key_cents_mode == 1);
         p[6] = (short)sister_semi_word(700);
         assert(reg->shift_knob(p, 1, 13) == 1 && sister_key_of(p[6]) == 713);
@@ -218,7 +224,7 @@ int main(void)
         p[6] = (short)sister_semi_word(-2300);
         assert(reg->shift_knob(p, 1, -500) == 1 && sister_key_of(p[6]) == -2399 && p[6] > 0);
         p[6] = (short)sister_semi_word(700);
-        sister_host_cycles += 400000u * 35u; h_begin(); reg->view(vp, &v); sister_host_cycles += 400000u * 35u; h_begin();
+        sister_host_cycles += 400000u * 35u; h_begin(); core_view(vp, &v); sister_host_cycles += 400000u * 35u; h_begin();
         assert(h_key(0x3C, 1) == 1 && h_key(0x3C, 0) == 1 && sister_key_cents_mode == 0);
         assert(reg->shift_knob(p, 1, 1) == 1 && sister_key_of(p[6]) == 800);   /* snapped back to whole semitones */
         /* off the page, a green push is the OS's */
@@ -234,7 +240,7 @@ int main(void)
         for (int i = 0; i < 5; i++) { sister_host_cycles += 400000u * 35u; h_begin(); h_under(frame); }
         assert(strokes == s0);                            /* no view: nothing drawn */
         short vp[8] = { 19661, 6554, 0, 11469, 0, 0, 16384, 0 };
-        unsigned frames_drawn = 0, maxs = 0;
+        unsigned frames_drawn = 0, maxs = 0, art0 = art_draws, puts0 = puts_;
         for (int f = 0; f < 400; f++) {
             sister_host_cycles += 400000u * 33u;
             if (f == 100) vp[1] = 32767;                   /* PIPES */
@@ -244,23 +250,24 @@ int main(void)
             h_begin();
             const unsigned before = strokes;
             h_under(frame);
+            core_view(vp, &v);
             if (strokes > before) { frames_drawn++; if (strokes - before > maxs) maxs = strokes - before; }
-            reg->view(vp, &v);
             for (int i = 0; i < 4; i++) assert(v.label[i] && v.value[i] && !v.label[i][0] && !v.value[i][0]);
             assert(v.waves == 0 && !v.caption);
             /* keep the reverb ringing for the telemetry */
             for (int i = 0; i < 64; i++) l[i] = (int16_t)(f < 150 ? rnd() / 2 : 0);
             reg->mono(&syn.fx, l, vp);
         }
-        assert(frames_drawn == 399 && strokes_bad == 0);
-        assert(art_draws == 1 && puts_ == frames_drawn - 1);
+        assert(frames_drawn == 400 && strokes_bad == 0);
+        /* the art (kept since test 5's frames, grey then) is drawn at most once more here, in colour, then put back */
+        assert(art_draws - art0 <= 1 && puts_ - puts0 >= frames_drawn - 1);
         assert(!strcmp(text_seen[0], "space") && !strncmp(text_seen[3], "swell", 5) && !strcmp(text_seen[4], "mix"));
         assert(!strcmp(text_seen[1], "00"));
         printf("  green label with shift held: \"%s\"\n", text_seen[2]);
         assert(!strncmp(text_seen[2], "key ", 4));
         shift = 0;
-        sister_host_cycles += 400000u * 35u; h_begin(); h_under(frame); reg->view(vp, &v);
-        for (int i = 0; i < 60; i++) { sister_host_cycles += 400000u * 35u; h_begin(); h_under(frame); reg->view(vp, &v); }
+        sister_host_cycles += 400000u * 35u; h_begin(); h_under(frame); core_view(vp, &v);
+        for (int i = 0; i < 60; i++) { sister_host_cycles += 400000u * 35u; h_begin(); h_under(frame); core_view(vp, &v); }
         assert(!strcmp(text_seen[2], "voice"));
         printf("  %u frames drawn, at most %u strokes a frame, %u texts, art drawn %u time(s)\n", frames_drawn, maxs, texts,
                art_draws);
@@ -279,7 +286,7 @@ int main(void)
                     if (!phase) for (int b = 0; b < 23; b++) { for (int i = 0; i < 64; i++) l[i] = (int16_t)(rnd() / 4); reg->mono(&syn.fx, l, vp); }
                     if (phase && f == 2) vp[0] = (short)(vp[0] ^ 0x1000);   /* a knob turned while off: still on the page */
                     strokes_colour = strokes_grey = 0;
-                    sister_host_cycles += 400000u * 35u; h_begin(); h_under(frame); reg->view(vp, &v);
+                    sister_host_cycles += 400000u * 35u; h_begin(); h_under(frame); core_view(vp, &v);
                     if (f >= 4) {                                  /* settled: the state shows */
                         if (phase) assert(strokes_colour == 0 && strokes_grey > 300 && last_put == 0x4321);
                         else { if (!(strokes_colour > 250 && last_put == 0x1234)) fprintf(stderr, "cycle %d f %d colour %u grey %u put %x\n", cycle, f, strokes_colour, strokes_grey, last_put); assert(strokes_colour > 250 && last_put == 0x1234); }
@@ -327,16 +334,16 @@ int main(void)
         mock_owner = 0; mock_page = 1;
         for (int f = 0; f < 6; f++) {                       /* running, slow frames: coloured */
             for (int b = 0; b < 96; b++) { for (int i = 0; i < 64; i++) l[i] = 0; reg->mono(&syn.fx, l, vp); }
-            strokes_colour = strokes_grey = 0; sister_host_cycles += 400000u * 140u; h_begin(); h_under(frame); reg->view(vp, &v);
+            strokes_colour = strokes_grey = 0; sister_host_cycles += 400000u * 140u; h_begin(); h_under(frame); core_view(vp, &v);
             assert(strokes_colour > 250);
         }
-        for (int f = 0; f < 3; f++) { strokes_colour = strokes_grey = 0; sister_host_cycles += 400000u * 140u; h_begin(); h_under(frame); reg->view(vp, &v); }
+        for (int f = 0; f < 3; f++) { strokes_colour = strokes_grey = 0; sister_host_cycles += 400000u * 140u; h_begin(); h_under(frame); core_view(vp, &v); }
         assert(strokes_colour == 0 && strokes_grey > 250);   /* stopped: grey within two slow frames */
         short p[8] = { 0, 0, 0, 0, 0, 0, 16384, 0 };
         reg->shift_knob(p, 1, 2);                            /* the key shows for 1.5 s */
-        for (int f = 0; f < 6; f++) { sister_host_cycles += 400000u * 140u; h_begin(); h_under(frame); reg->view(vp, &v); }
+        for (int f = 0; f < 6; f++) { sister_host_cycles += 400000u * 140u; h_begin(); h_under(frame); core_view(vp, &v); }
         assert(!strncmp(text_seen[2], "key ", 4));           /* 0.84 s: still the key */
-        for (int f = 0; f < 6; f++) { sister_host_cycles += 400000u * 140u; h_begin(); h_under(frame); reg->view(vp, &v); }
+        for (int f = 0; f < 6; f++) { sister_host_cycles += 400000u * 140u; h_begin(); h_under(frame); core_view(vp, &v); }
         assert(!strcmp(text_seen[2], "voice"));              /* 1.68 s: back to voice */
         struct opus_need nd = { 0, 0, 0, 0 };
         reg->need(1, &nd);
@@ -372,20 +379,20 @@ int main(void)
         mock_owner = 0;
         for (int f = 0; f < 8; f++) {
             for (int b = 0; b < 23; b++) { for (int i = 0; i < 64; i++) l[i] = 0; mock_instr = 0; reg->mono(&syn.fx, l, vp); }
-            strokes_colour = strokes_grey = 0; sister_host_cycles += 400000u * 35u; h_begin(); h_under(frame); reg->view(vp, &v);
+            strokes_colour = strokes_grey = 0; sister_host_cycles += 400000u * 35u; h_begin(); h_under(frame); core_view(vp, &v);
         }
         assert(strokes_colour > 250);
         /* the master's page (owner 16): the master instance has not run: grey, though the synth runs */
         mock_owner = 16;
         for (int f = 0; f < 8; f++) {
             for (int b = 0; b < 23; b++) { for (int i = 0; i < 64; i++) l[i] = 0; reg->mono(&syn.fx, l, vp); }
-            strokes_colour = strokes_grey = 0; sister_host_cycles += 400000u * 35u; h_begin(); h_under(frame); reg->view(vp, &v);
+            strokes_colour = strokes_grey = 0; sister_host_cycles += 400000u * 35u; h_begin(); h_under(frame); core_view(vp, &v);
         }
         assert(strokes_colour == 0 && strokes_grey > 250);
         /* ...and coloured once the master runs */
         for (int f = 0; f < 8; f++) {
             for (int b = 0; b < 23; b++) { for (int i = 0; i < 64; i++) { l[i] = 0; r[i] = 0; } reg->stereo(&m9.fx, l, r, vp); }
-            strokes_colour = strokes_grey = 0; sister_host_cycles += 400000u * 35u; h_begin(); h_under(frame); reg->view(vp, &v);
+            strokes_colour = strokes_grey = 0; sister_host_cycles += 400000u * 35u; h_begin(); h_under(frame); core_view(vp, &v);
         }
         assert(strokes_colour > 250);
         /* the core says no effect page shows: nothing drawn, a green push is the OS's */
@@ -393,12 +400,46 @@ int main(void)
         s0 = strokes; h_begin(); h_under(frame);
         assert(strokes == s0 && h_key(0x3C, 1) == 0 && h_key(0x3C, 0) == 0);
         /* the owner changed since our view (another slot's page): nothing drawn */
-        mock_page = 1; h_begin(); reg->view(vp, &v); mock_owner = 3; h_begin();
+        mock_page = 1; h_begin(); core_view(vp, &v); mock_owner = 3; h_begin();
         s0 = strokes; h_under(frame);
         assert(strokes == s0);
         mock_owner = 0;
     }
     puts("9 page via opus_fx_page_shown + owner; instance by position (synth, master); hidden page draws nothing: PASS");
+    layering();
     puts("sammi.sister Opus host test PASS");
     return 0;
+}
+
+/* 11: layering (1.2.1). On the core's frame order (under pass, its effect page with `view`, then its "off" overlay),
+   SISTER draws only inside `view`, so the overlay covers it; on a core whose `view` has no frame (SISTER_FALLBACK=1)
+   it draws in the under pass and nothing while the effect is off, so it never lies over the overlay. */
+static void layering(void)
+{
+    struct opus_fx_view v;
+    short vp[8] = { 19661, 6554, 0, 11469, 0, 0, 16384, 0 };
+    struct opus_need n = { 0, 0, 0, 0 };
+    reg->need(0, &n);
+    struct opus_fx fx = { calloc(1, n.state), calloc(1, n.bulk), aligned_alloc(32, (n.fast + 31) & ~31u), 0 };
+    reg->init(&fx);
+    int16_t buf[64];
+    mock_owner = 0; mock_page = 1; mock_instr = 0;
+    unsigned in_under_on = 0, in_view_on = 0, in_under_off = 0, in_view_off = 0;
+    for (int f = 0; f < 60; f++) {
+        const int on = f < 30;                                /* T3 at frame 30: the OS stops calling the effect */
+        sister_host_cycles += 400000u * 33u;
+        if (on) for (int b = 0; b < 23; b++) { for (int i = 0; i < 64; i++) buf[i] = 0; reg->mono(&fx, buf, vp); }
+        h_begin();
+        unsigned a = strokes; h_under(frame); const unsigned u = strokes - a;
+        a = strokes; core_view(vp, &v); const unsigned w = strokes - a;
+        /* the overlay draws here; nothing of SISTER's may come after it in the frame */
+        if (f >= 2 && f < 30) { in_under_on += u; in_view_on += w; }
+        if (f >= 36) { in_under_off += u; in_view_off += w; }
+    }
+    printf("  %s: strokes on (under %u, view %u), off (under %u, view %u)\n", fallback ? "fallback" : "view path",
+           in_under_on, in_view_on, in_under_off, in_view_off);
+    if (!fallback) assert(in_under_on == 0 && in_under_off == 0 && in_view_on > 5000 && in_view_off > 5000);
+    else assert(in_view_on == 0 && in_view_off == 0 && in_under_on > 5000 && in_under_off == 0);
+    puts(fallback ? "11 layering, fallback core: drawn under the screen, nothing while the effect is off: PASS"
+                  : "11 layering: drawn inside the effect page (view), before the core's off overlay, in the under pass never: PASS");
 }

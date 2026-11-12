@@ -25,7 +25,8 @@ Bloodmoon, Erdtree, Hollow Saint, The Bronze Choir, ROOMS, Reverb and Stutter.
       (Dark Sister: blue space, green voice, white swell, orange mix; shift + green key; green push semis/cents;
       shift + orange dark)
 - [ ] Save a sound using it, restart, reload: the settings come back
-- [ ] Screen: draws, follows the colour theme; effects: turning the FX off greys the page and on restores it
+- [ ] Screen: draws, follows the colour theme; effects: turning the FX off (T3) greys the page and on restores it, and
+      the OS's "off" popup is drawn over the page, not under it
 - [ ] 10 minutes of normal playing: no clicks, dropouts, freezes, or a crash log (hold **help** for it)
 
 ## 3. CPU **[OP-1]**

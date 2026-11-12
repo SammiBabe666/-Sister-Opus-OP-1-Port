@@ -167,9 +167,9 @@ int main(int argc, char **argv)
         snprintf(path, sizeof path, "%s/frames/%04d.svg", argv[1], f);
         svg = fopen(path, "w");
         h_under(frame);
-        fclose(svg); svg = 0;
         struct opus_fx_view v;
-        reg->view(par, &v);
+        reg->view(par, &v);                         /* 1.2.1: SISTER draws inside view */
+        fclose(svg); svg = 0;
         fprintf(cp, "%s\n", cap);
     }
     fclose(au); fclose(cp);
